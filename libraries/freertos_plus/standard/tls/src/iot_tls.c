@@ -75,6 +75,8 @@
 typedef struct TLSContext
 {
     const char * pcDestination;
+    char * pcClientCertificate;
+    uint32_t pcClientCertificateLength;
     const char * pcServerCertificate;
     uint32_t ulServerCertificateLength;
     const char ** ppcAlpnProtocols;
@@ -598,10 +600,25 @@ static int prvInitializeClientCredential( TLSContext_t * pxCtx )
     /* Get the handle of the device client certificate. */
     if( xResult == CKR_OK )
     {
-        xResult = prvReadCertificateIntoContext( pxCtx,
-                                                 pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS,
-                                                 CKO_CERTIFICATE,
-                                                 &pxCtx->xMbedX509Cli );
+        /* If a client certificate has been specified, try to retrieve it
+         * from the PKCS #11 module. */
+        if( pxCtx->pcClientCertificate != NULL )
+        {
+            xResult = prvReadCertificateIntoContext( pxCtx,
+                                                     pxCtx->pcClientCertificate,
+                                                     CKO_CERTIFICATE,
+                                                     &pxCtx->xMbedX509Cli );
+        }
+
+        /* Otherwise, try to read the certificate corresponding to the default
+         * client certificate label. */
+        else
+        {
+            xResult = prvReadCertificateIntoContext( pxCtx,
+                                                     pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS,
+                                                     CKO_CERTIFICATE,
+                                                     &pxCtx->xMbedX509Cli );
+        }
     }
 
     /* Add a Just-in-Time Registration (JITR) device issuer certificate, if
@@ -672,6 +689,8 @@ BaseType_t TLS_Init( void ** ppvContext,
 
         /* Initialize the context. */
         pxCtx->pcDestination = pxParams->pcDestination;
+        pxCtx->pcClientCertificate = pxParams->pcClientCertificate;
+        pxCtx->pcClientCertificateLength = pxParams->pcClientCertificateLength;
         pxCtx->pcServerCertificate = pxParams->pcServerCertificate;
         pxCtx->ulServerCertificateLength = pxParams->ulServerCertificateLength;
         pxCtx->ppcAlpnProtocols = pxParams->ppcAlpnProtocols;

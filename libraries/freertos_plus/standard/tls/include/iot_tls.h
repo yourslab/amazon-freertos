@@ -89,6 +89,8 @@ typedef struct xTLS_PARAMS
 {
     uint32_t ulSize;
     const char * pcDestination;
+    char * pcClientCertificate;
+    uint32_t pcClientCertificateLength;
     const char * pcServerCertificate;
     uint32_t ulServerCertificateLength;
     const char ** ppcAlpnProtocols;

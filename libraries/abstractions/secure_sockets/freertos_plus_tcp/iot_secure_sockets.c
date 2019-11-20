@@ -51,6 +51,8 @@ typedef struct SSOCKETContext
     BaseType_t xRequireTLS;
     BaseType_t xSendFlags;
     BaseType_t xRecvFlags;
+    char * pcClientCertificate;
+    uint32_t pcClientCertificateLength;
     char * pcServerCertificate;
     uint32_t ulServerCertificateLength;
     char ** ppcAlpnProtocols;
@@ -104,6 +106,12 @@ int32_t SOCKETS_Close( Socket_t xSocket )
         if( NULL != pxContext->pcDestination )
         {
             vPortFree( pxContext->pcDestination );
+        }
+
+        /* Clean-up client certificate. */
+        if ( NULL != pxContext->pcClientCertificate )
+        {
+            vPortFree( pxContext->pcClientCertificate );
         }
 
         /* Clean-up server certificate. */
@@ -177,6 +185,8 @@ int32_t SOCKETS_Connect( Socket_t xSocket,
         {
             xTLSParams.ulSize = sizeof( xTLSParams );
             xTLSParams.pcDestination = pxContext->pcDestination;
+            xTLSParams.pcClientCertificate = pxContext->pcClientCertificate;
+            xTLSParams.pcClientCertificateLength = pxContext->pcClientCertificateLength;
             xTLSParams.pcServerCertificate = pxContext->pcServerCertificate;
             xTLSParams.ulServerCertificateLength = pxContext->ulServerCertificateLength;
             xTLSParams.ppcAlpnProtocols = ( const char ** ) pxContext->ppcAlpnProtocols;
@@ -340,6 +350,31 @@ int32_t SOCKETS_SetSockOpt( Socket_t xSocket,
                 }
 
                 break;
+
+            case SOCKETS_SO_SET_CLIENT_CERTIFICATE:
+
+                /* Do not set the client certificate if the socket is already connected. */
+                if( pxContext->xConnectAttempted == pdTRUE )
+                {
+                    lStatus = SOCKETS_EISCONN;
+                }
+                /* Add 1 because PKCS #11 labels are not guaranteed to be NULL terminated,
+                and lower level calls may interpret this as a string. */
+                else if( NULL == ( pxContext->pcClientCertificate =
+                                       pvPortMalloc( xOptionLength + 1 ) ) ) 
+                {
+                    lStatus = SOCKETS_ENOMEM;
+                }
+
+                else
+                {
+                    memcpy( pxContext->pcClientCertificate, pvOptionValue, xOptionLength );
+                    pxContext->pcClientCertificate[ xOptionLength ] = '\0';
+                    pxContext->pcClientCertificateLength = xOptionLength;
+                }
+
+                break;
+
 
             case SOCKETS_SO_REQUIRE_TLS:
 

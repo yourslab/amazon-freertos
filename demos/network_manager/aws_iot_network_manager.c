@@ -41,6 +41,7 @@
 #include "platform/iot_threads.h"
 #include "platform/iot_clock.h"
 
+#include "iot_pkcs11_config.h"
 #include "aws_clientcredential.h"
 #include "aws_clientcredential_keys.h"
 
@@ -661,6 +662,7 @@ static void _initializeTCPIPCredentials( void )
         tcpIPConnectionParams.pHostName = clientcredentialMQTT_BROKER_ENDPOINT;
         tcpIPConnectionParams.port = clientcredentialMQTT_BROKER_PORT;
 
+        /* These are TLS settings. */
         if( tcpIPConnectionParams.port == 443 )
         {
             tcpIPCredentials.pAlpnProtos = socketsAWS_IOT_ALPN_MQTT;
@@ -674,8 +676,8 @@ static void _initializeTCPIPCredentials( void )
         tcpIPCredentials.disableSni = false;
         tcpIPCredentials.pRootCa = NULL;
         tcpIPCredentials.rootCaSize = 0;
-        tcpIPCredentials.pClientCert = keyCLIENT_CERTIFICATE_PEM;
-        tcpIPCredentials.clientCertSize = sizeof( keyCLIENT_CERTIFICATE_PEM );
+        tcpIPCredentials.pClientCert = pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS;
+        tcpIPCredentials.clientCertSize = sizeof( pkcs11configLABEL_DEVICE_CERTIFICATE_FOR_TLS );
         tcpIPCredentials.pPrivateKey = keyCLIENT_PRIVATE_KEY_PEM;
         tcpIPCredentials.privateKeySize = sizeof( keyCLIENT_PRIVATE_KEY_PEM );
     #endif /* if TCPIP_NETWORK_ENABLED */

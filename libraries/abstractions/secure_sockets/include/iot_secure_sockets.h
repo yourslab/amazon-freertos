@@ -168,6 +168,8 @@ typedef struct xSOCKET * Socket_t;
 #define SOCKETS_SO_NONBLOCK                      ( 9 )  /**< Socket is nonblocking. */
 #define SOCKETS_SO_ALPN_PROTOCOLS                ( 10 ) /**< Application protocol list to be included in TLS ClientHello. */
 #define SOCKETS_SO_WAKEUP_CALLBACK               ( 17 ) /**< Set the callback to be called whenever there is data available on the socket for reading. */
+#define SOCKETS_SO_SET_CLIENT_CERTIFICATE        ( 18 ) /**< Set the client certificate to be used for TLS connection. */
+#define SOCKETS_SO_SET_CLIENT_PRIVATE_KEY        ( 19 ) /**< Set the client private key to be used for TLS connection. */
 
 /**@} */
 

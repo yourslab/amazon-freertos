@@ -249,6 +249,22 @@ static IotNetworkError_t _tlsSetup( const IotNetworkCredentials_t * pAfrCredenti
         IOT_SET_AND_GOTO_CLEANUP( IOT_NETWORK_SYSTEM_ERROR );
     }
 
+    if( pAfrCredentials->pClientCert != NULL )
+    {
+        /* Set client credential configurations. */
+        socketStatus = SOCKETS_SetSockOpt( tcpSocket,
+                                           0,
+                                           SOCKETS_SO_SET_CLIENT_CERTIFICATE,
+                                           pAfrCredentials->pClientCert,
+                                           pAfrCredentials->clientCertSize );
+
+        if( socketStatus != SOCKETS_ERROR_NONE )
+        {
+            IotLogError( "Failed to set client certificate option for new connection." );
+            IOT_SET_AND_GOTO_CLEANUP( IOT_NETWORK_SYSTEM_ERROR );
+        }
+    }
+
     /* Set ALPN option. */
     if( pAfrCredentials->pAlpnProtos != NULL )
     {
