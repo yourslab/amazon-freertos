@@ -204,7 +204,7 @@ const char * pcPkcs11GetThingName(void)
     return gcPkcs11ThingNameCache;
 }
 
-#ifdef ATCA_HAL_I2c
+#ifdef ATCA_HAL_I2C
 /** \brief default configuration for an ECCx08A device */
 ATCAIfaceCfg cfg_ateccx08a_i2c_default = {
     .iface_type             = ATCA_I2C_IFACE,
