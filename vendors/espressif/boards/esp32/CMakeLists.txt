@@ -360,6 +360,8 @@ target_link_libraries(
     INTERFACE
         AFR::crypto
         AFR::pkcs11
+        AFR::ota_mqtt
+        AFR::ota_http
 )
 
 # -------------------------------------------------------------------------------------------------

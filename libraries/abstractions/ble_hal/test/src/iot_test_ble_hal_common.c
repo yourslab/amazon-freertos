@@ -1,5 +1,5 @@
 /*
- * Amazon FreeRTOS BLE HAL V2.0.0
+ * Amazon FreeRTOS BLE HAL V4.0.0
  * Copyright (C) 2019 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -1575,7 +1575,7 @@ void prvSetAdvDataCb( BTStatus_t xStatus )
 }
 
 void prvAdvStatusCb( BTStatus_t xStatus,
-                     uint32_t ulServerIf,
+                     uint8_t ucAdapterIf,
                      bool bStart )
 {
     BLETESTAdvParamCallback_t * xdvParamCallback = IotTest_Malloc( sizeof( BLETESTAdvParamCallback_t ) );
@@ -1587,7 +1587,7 @@ void prvAdvStatusCb( BTStatus_t xStatus,
 
     if( xdvParamCallback->xStatus == eBTStatusSuccess )
     {
-        if( ulServerIf != _ucBLEServerIf )
+        if( ucAdapterIf != _ucBLEAdapterIf )
         {
             xdvParamCallback->xStatus = eBTStatusFail;
         }

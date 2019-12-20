@@ -1,5 +1,5 @@
 /*
- * Amazon FreeRTOS BLE HAL V1.0.0
+ * Amazon FreeRTOS BLE HAL V4.0.0
  * Copyright (C) 2019 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
@@ -446,7 +446,7 @@ void prvAdapterPropertiesCb( BTStatus_t xStatus,
                              BTProperty_t * pxProperties );
 void prvSetAdvDataCb( BTStatus_t xStatus );
 void prvAdvStatusCb( BTStatus_t xStatus,
-                     uint32_t ulServerIf,
+                     uint8_t ucAdapterIf,
                      bool bStart );
 void prvConnectionCb( uint16_t usConnId,
                       uint8_t ucServerIf,
