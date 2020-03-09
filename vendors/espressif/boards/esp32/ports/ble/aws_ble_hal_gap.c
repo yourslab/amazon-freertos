@@ -694,14 +694,20 @@ BTStatus_t prvBTSetAdvData( uint8_t ucAdapterIf,
     uint8_t ucFlags;
     uint8_t ucTxPower;
     esp_err_t xESPErr = ESP_OK;
+    char *pDeviceName;
+    size_t deviceNameLength;
 
-    if( ( pxParams->ucNameType == BTGattAdvNameComplete ) || ( IOT_BLE_DEVICE_SHORT_LOCAL_NAME_SIZE >= sizeof( IOT_BLE_DEVICE_COMPLETE_LOCAL_NAME ) - 1 ) )
+
+    pDeviceName = prxESPGetBLEDeviceName();
+    deviceNameLength = strlen( pDeviceName );
+
+    if( ( pxParams->ucNameType == BTGattAdvNameComplete ) || ( IOT_BLE_DEVICE_SHORT_LOCAL_NAME_SIZE >= deviceNameLength ) )
     {
-        prvAddToAdvertisementMessage( ucMessageRaw, &ucMessageIndex, ESP_BLE_AD_TYPE_NAME_CMPL, ( uint8_t * ) IOT_BLE_DEVICE_COMPLETE_LOCAL_NAME, sizeof( IOT_BLE_DEVICE_COMPLETE_LOCAL_NAME ) - 1 );
+        prvAddToAdvertisementMessage( ucMessageRaw, &ucMessageIndex, ESP_BLE_AD_TYPE_NAME_CMPL, ( uint8_t * ) pDeviceName, deviceNameLength );
     }
     else if( pxParams->ucNameType == BTGattAdvNameShort )
     {
-        prvAddToAdvertisementMessage( ucMessageRaw, &ucMessageIndex, ESP_BLE_AD_TYPE_NAME_SHORT, ( uint8_t * ) IOT_BLE_DEVICE_COMPLETE_LOCAL_NAME, IOT_BLE_DEVICE_SHORT_LOCAL_NAME_SIZE );
+        prvAddToAdvertisementMessage( ucMessageRaw, &ucMessageIndex, ESP_BLE_AD_TYPE_NAME_SHORT, ( uint8_t * ) pDeviceName, IOT_BLE_DEVICE_SHORT_LOCAL_NAME_SIZE );
     }
 
     if( ( pxParams->bIncludeTxPower == true ) && ( xStatus == eBTStatusSuccess ) )

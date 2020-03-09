@@ -137,6 +137,16 @@
     #define IOT_BLE_DEVICE_COMPLETE_LOCAL_NAME    "BLE"
 #endif
 
+
+/**
+ * @brief Buffer length to hold the BLE local device name.
+ * As per BLE4.2 SPEC, device name length can be between 0 and 248 octet in length.
+ *
+ */
+#ifndef IOT_BLE_DEVICE_LOCAL_NAME_MAX_LENGTH
+    #define IOT_BLE_DEVICE_LOCAL_NAME_MAX_LENGTH    ( 248 )
+#endif
+
 /**
  * @brief Preferred MTU size for the device for a BLE connection.
  *
@@ -246,6 +256,7 @@
     #define IOT_BLE_CHAR_READ_PERM         eBTPermRead
     #define IOT_BLE_CHAR_WRITE_PERM        eBTPermWrite
 #endif
+
 
 #define IOT_BLE_MESG_ENCODER               ( _IotSerializerCborEncoder )
 #define IOT_BLE_MESG_DECODER               ( _IotSerializerCborDecoder )

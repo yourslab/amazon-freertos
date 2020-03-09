@@ -30,6 +30,7 @@
 
 #include <string.h>
 #include "FreeRTOS.h"
+#include "iot_ble_config.h"
 #include "esp_bt.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatt_common_api.h"
@@ -45,6 +46,9 @@
 BTProperties_t xProperties;
 uint32_t ulGAPEvtMngHandle;
 static BTCallbacks_t xBTCallbacks;
+
+static char bleDeviceName[ IOT_BLE_DEVICE_LOCAL_NAME_MAX_LENGTH + 1 ] = { 0 };
+
 
 static BTSecurityLevel_t prvConvertESPauthModeToSecurityLevel( esp_ble_auth_req_t xAuthMode );
 BTStatus_t prvBTManagerInit( const BTCallbacks_t * pxCallbacks );
@@ -346,6 +350,11 @@ void prvGAPeventHandler( esp_gap_ble_cb_event_t event,
     }
 }
 
+char * prxESPGetBLEDeviceName( void )
+{
+    return bleDeviceName;
+}
+
 /*
  * BTAuthFailureReason_t prvESPFailPairingReasonsToBTAuthFailingReasons(uint8_t ucESPFailPairing)
  * {
@@ -644,7 +653,11 @@ BTStatus_t prvBTGetDeviceProperty( BTPropertyType_t xType )
                 break;
 
             case eBTpropertyBdname:
-                xStatus = eBTStatusUnsupported;
+                xReturnedProperty.xLen = strlen( bleDeviceName );
+                xReturnedProperty.xType = eBTpropertyBdname;
+                xReturnedProperty.pvVal = ( void * ) bleDeviceName;
+
+                xBTCallbacks.pxAdapterPropertiesCb( eBTStatusSuccess, 1, &xReturnedProperty );
                 break;
 
             case eBTpropertyBdaddr:
@@ -697,26 +710,24 @@ BTStatus_t prvBTSetDeviceProperty( const BTProperty_t * pxProperty )
 {
     BTStatus_t xStatus = eBTStatusSuccess;
     esp_err_t xESPstatus;
-    char * pcName;
 
     switch( pxProperty->xType )
     {
         case eBTpropertyBdname:
-            pcName = pvPortMalloc( pxProperty->xLen + 1 );
 
-            if( pcName != NULL )
+            if( pxProperty->xLen <= IOT_BLE_DEVICE_LOCAL_NAME_MAX_LENGTH )
             {
-                memcpy( pcName, pxProperty->pvVal, pxProperty->xLen );
+                memcpy( bleDeviceName, pxProperty->pvVal, pxProperty->xLen );
                 /* Add NULL termination for name string */
-                pcName[ pxProperty->xLen ] = '\0';
-                xESPstatus = esp_ble_gap_set_device_name( pcName );
+                bleDeviceName[ pxProperty->xLen ] = '\0';
+                xESPstatus = esp_ble_gap_set_device_name( bleDeviceName );
 
                 if( xESPstatus != ESP_OK )
                 {
+                    bleDeviceName[0] = '\0';
                     xStatus = eBTStatusFail;
                 }
 
-                vPortFree( pcName );
             }
             else
             {
