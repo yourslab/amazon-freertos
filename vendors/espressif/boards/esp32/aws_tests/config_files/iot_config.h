@@ -27,6 +27,13 @@
 /* Standard include. */
 #include <stdbool.h>
 
+/**
+ *  ESP log header file include to override with ESP logging.
+ *  Un-comment to enable ESP logging override
+ */
+//#include "esp_log.h"
+
+
 /* Platform thread stack size and priority. */
 #define IOT_THREAD_DEFAULT_STACK_SIZE    5000
 #define IOT_THREAD_DEFAULT_PRIORITY      5
@@ -41,6 +48,33 @@ extern void IotBleMqtt_CleanupSerialize( void );
 #define DEFAULT_NETWORK    AWSIOT_NETWORK_TYPE_WIFI
 #define BLE_SUPPORTED      ( 1 )
 #define WIFI_SUPPORTED     ( 1 )
+
+#define IOT_LOG_LEVEL_GLOBAL                    IOT_LOG_INFO
+#define IOT_LOG_LEVEL_DEMO                      IOT_LOG_INFO
+#define IOT_LOG_LEVEL_PLATFORM                  IOT_LOG_NONE
+#define IOT_LOG_LEVEL_NETWORK                   IOT_LOG_INFO
+#define IOT_LOG_LEVEL_TASKPOOL                  IOT_LOG_NONE
+#define IOT_LOG_LEVEL_MQTT                      IOT_LOG_INFO
+#define AWS_IOT_LOG_LEVEL_SHADOW                IOT_LOG_INFO
+#define AWS_IOT_LOG_LEVEL_DEFENDER              IOT_LOG_INFO
+
+/**
+ * Override  FreeRTOS IotLog macro to above macros.
+ * Un-comment the macro to enable ESP logging override.
+ */
+/**
+#define IotLog( messageLevel, pLogConfig, format, ... )                                                      \
+    do {                                                                                                     \
+       if( ( messageLevel > 0 ) && ( messageLevel <= LIBRARY_LOG_LEVEL ) )                                   \
+       {                                                                                                     \
+           if( messageLevel == IOT_LOG_INFO )       { ESP_LOGI( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_DEBUG ) { ESP_LOGD( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_WARN )  { ESP_LOGW( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_ERROR ) { ESP_LOGE( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+       }                                                                                                     \
+    } while(0);
+*/
+
 
 /* Include the common configuration file for FreeRTOS. */
 #include "iot_config_common.h"

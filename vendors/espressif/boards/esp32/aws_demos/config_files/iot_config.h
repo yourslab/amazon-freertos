@@ -27,6 +27,12 @@
 /* Standard include. */
 #include <stdbool.h>
 
+/**
+ *  ESP log header file include to override with ESP logging.
+ *  Un-comment to enable ESP logging override
+ */
+ //#include "esp_log.h"
+
 /* How long the MQTT library will wait for PINGRESPs or PUBACKs. */
 #define IOT_MQTT_RESPONSE_WAIT_MS            ( 10000 )
 
@@ -70,6 +76,23 @@ extern void IotBleMqtt_CleanupSerialize( void );
 typedef struct IotMqttSerializer IotMqttSerializer_t;
 extern const IotMqttSerializer_t * demoGetMqttSerializer( void );
 #define IOT_DEMO_MQTT_SERIALIZER   demoGetMqttSerializer()
+
+/**
+ * Override  FreeRTOS IotLog macro to above macros.
+ * Un-comment the macro to enable ESP logging override.
+ */
+/**
+#define IotLog( messageLevel, pLogConfig, format, ... )                                                      \
+    do {                                                                                                     \
+       if( ( messageLevel > 0 ) && ( messageLevel <= LIBRARY_LOG_LEVEL ) )                                   \
+       {                                                                                                     \
+           if( messageLevel == IOT_LOG_INFO )       { ESP_LOGI( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_DEBUG ) { ESP_LOGD( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_WARN )  { ESP_LOGW( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+           else if( messageLevel == IOT_LOG_ERROR ) { ESP_LOGE( LIBRARY_LOG_NAME, format, ##__VA_ARGS__ ); } \
+       }                                                                                                     \
+    } while(0);
+*/
 
 /* Include the common configuration file for FreeRTOS. */
 #include "iot_config_common.h"

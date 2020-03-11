@@ -621,7 +621,7 @@ static void _onNetworkStateChangeCallback( uint32_t networkType, AwsIotNetworkSt
                 }
                 else
                 {
-                    IotLogError("Failed to invoke subscription task for network: %d, state: %d, error:",
+                    IotLogError("Failed to invoke subscription task for network: %d, state: %d, error:%d",
                                 pNetwork->type,
                                 newState,
                                 error);
@@ -633,7 +633,7 @@ static void _onNetworkStateChangeCallback( uint32_t networkType, AwsIotNetworkSt
         }
         else
         {
-            IotLogError("Failed to create subscription task for network: %d, state: %d, error:",
+            IotLogError("Failed to create subscription task for network: %d, state: %d, error:%d",
                         pNetwork->type,
                         newState,
                         error);
