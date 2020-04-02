@@ -83,7 +83,6 @@ static const uint32_t _ECHO_SERVER_IP = SOCKETS_inet_addr_quick( tcptestECHO_SER
 
 /* Empty callback structure passed to startInfo. */
 static const AwsIotDefenderCallback_t _emptyCallback = { .function = NULL, .pCallbackContext = NULL };
-
 static struct IotNetworkServerInfo _serverInfo = IOT_TEST_NETWORK_SERVER_INFO_INITIALIZER;
 static struct IotNetworkCredentials _credential = IOT_TEST_NETWORK_CREDENTIALS_INITIALIZER;
 static IotMqttConnection_t _mqttConnection = IOT_MQTT_CONNECTION_INITIALIZER;
