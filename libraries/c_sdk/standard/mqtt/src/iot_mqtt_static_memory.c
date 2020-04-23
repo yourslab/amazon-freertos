@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,9 +18,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
@@ -35,15 +32,14 @@
 #if IOT_STATIC_MEMORY_ONLY == 1
 
 /* Standard includes. */
-    #include <stdbool.h>
-    #include <stddef.h>
-    #include <string.h>
+#include <stddef.h>
+#include <string.h>
 
 /* Static memory include. */
-    #include "private/iot_static_memory.h"
+#include "iot_static_memory.h"
 
 /* MQTT internal include. */
-    #include "private/iot_mqtt_internal.h"
+#include "private/iot_mqtt_internal.h"
 
 /*-----------------------------------------------------------*/
 
@@ -53,27 +49,27 @@
  *
  * Provide default values for undefined configuration constants.
  */
-    #ifndef IOT_MQTT_CONNECTIONS
-        #define IOT_MQTT_CONNECTIONS                   ( 1 )
-    #endif
-    #ifndef IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS
-        #define IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS    ( 10 )
-    #endif
-    #ifndef IOT_MQTT_SUBSCRIPTIONS
-        #define IOT_MQTT_SUBSCRIPTIONS                 ( 8 )
-    #endif
+#ifndef IOT_MQTT_CONNECTIONS
+    #define IOT_MQTT_CONNECTIONS                   ( 1 )
+#endif
+#ifndef IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS
+    #define IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS    ( 10 )
+#endif
+#ifndef IOT_MQTT_SUBSCRIPTIONS
+    #define IOT_MQTT_SUBSCRIPTIONS                 ( 8 )
+#endif
 /** @endcond */
 
 /* Validate static memory configuration settings. */
-    #if IOT_MQTT_CONNECTIONS <= 0
-        #error "IOT_MQTT_CONNECTIONS cannot be 0 or negative."
-    #endif
-    #if IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS <= 0
-        #error "IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS cannot be 0 or negative."
-    #endif
-    #if IOT_MQTT_SUBSCRIPTIONS <= 0
-        #error "IOT_MQTT_SUBSCRIPTIONS cannot be 0 or negative."
-    #endif
+#if IOT_MQTT_CONNECTIONS <= 0
+    #error "IOT_MQTT_CONNECTIONS cannot be 0 or negative."
+#endif
+#if IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS <= 0
+    #error "IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS cannot be 0 or negative."
+#endif
+#if IOT_MQTT_SUBSCRIPTIONS <= 0
+    #error "IOT_MQTT_SUBSCRIPTIONS cannot be 0 or negative."
+#endif
 
 /**
  * @brief The size of a static memory MQTT subscription.
@@ -82,126 +78,126 @@
  * #AWS_IOT_MQTT_SERVER_MAX_TOPIC_LENGTH is used for the length of
  * #_mqttSubscription_t.pTopicFilter.
  */
-    #define MQTT_SUBSCRIPTION_SIZE    ( sizeof( _mqttSubscription_t ) + AWS_IOT_MQTT_SERVER_MAX_TOPIC_LENGTH )
+#define MQTT_SUBSCRIPTION_SIZE    ( sizeof( _mqttSubscription_t ) + AWS_IOT_MQTT_SERVER_MAX_TOPIC_LENGTH )
 
 /*-----------------------------------------------------------*/
 
 /*
  * Static memory buffers and flags, allocated and zeroed at compile-time.
  */
-    static bool _pInUseMqttConnections[ IOT_MQTT_CONNECTIONS ] = { 0 };                                      /**< @brief MQTT connection in-use flags. */
-    static _mqttConnection_t _pMqttConnections[ IOT_MQTT_CONNECTIONS ] = { { 0 } };                          /**< @brief MQTT connections. */
+static uint32_t _pInUseMqttConnections[ IOT_MQTT_CONNECTIONS ];                      /**< @brief MQTT connection in-use flags. */
+static _mqttConnection_t _pMqttConnections[ IOT_MQTT_CONNECTIONS ];                  /**< @brief MQTT connections. */
 
-    static bool _pInUseMqttOperations[ IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS ] = { 0 };                        /**< @brief MQTT operation in-use flags. */
-    static _mqttOperation_t _pMqttOperations[ IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS ] = { { .link = { 0 } } }; /**< @brief MQTT operations. */
+static uint32_t _pInUseMqttOperations[ IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS ];        /**< @brief MQTT operation in-use flags. */
+static _mqttOperation_t _pMqttOperations[ IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS ];     /**< @brief MQTT operations. */
 
-    static bool _pInUseMqttSubscriptions[ IOT_MQTT_SUBSCRIPTIONS ] = { 0 };                                  /**< @brief MQTT subscription in-use flags. */
-    static char _pMqttSubscriptions[ IOT_MQTT_SUBSCRIPTIONS ][ MQTT_SUBSCRIPTION_SIZE ] = { { 0 } };         /**< @brief MQTT subscriptions. */
+static uint32_t _pInUseMqttSubscriptions[ IOT_MQTT_SUBSCRIPTIONS ];                  /**< @brief MQTT subscription in-use flags. */
+static char _pMqttSubscriptions[ IOT_MQTT_SUBSCRIPTIONS ][ MQTT_SUBSCRIPTION_SIZE ]; /**< @brief MQTT subscriptions. */
 
 /*-----------------------------------------------------------*/
 
-    void * IotMqtt_MallocConnection( size_t size )
-    {
-        int32_t freeIndex = -1;
-        void * pNewConnection = NULL;
+void * IotMqtt_MallocConnection( size_t size )
+{
+    int32_t freeIndex = -1;
+    void * pNewConnection = NULL;
 
-        /* Check size argument. */
-        if( size == sizeof( _mqttConnection_t ) )
+    /* Check size argument. */
+    if( size == sizeof( _mqttConnection_t ) )
+    {
+        /* Find a free MQTT connection. */
+        freeIndex = IotStaticMemory_FindFree( _pInUseMqttConnections,
+                                              IOT_MQTT_CONNECTIONS );
+
+        if( freeIndex != -1 )
         {
-            /* Find a free MQTT connection. */
-            freeIndex = IotStaticMemory_FindFree( _pInUseMqttConnections,
-                                                  IOT_MQTT_CONNECTIONS );
-
-            if( freeIndex != -1 )
-            {
-                pNewConnection = &( _pMqttConnections[ freeIndex ] );
-            }
+            pNewConnection = &( _pMqttConnections[ freeIndex ] );
         }
-
-        return pNewConnection;
     }
+
+    return pNewConnection;
+}
 
 /*-----------------------------------------------------------*/
 
-    void IotMqtt_FreeConnection( void * ptr )
-    {
-        /* Return the in-use MQTT connection. */
-        IotStaticMemory_ReturnInUse( ptr,
-                                     _pMqttConnections,
-                                     _pInUseMqttConnections,
-                                     IOT_MQTT_CONNECTIONS,
-                                     sizeof( _mqttConnection_t ) );
-    }
+void IotMqtt_FreeConnection( void * ptr )
+{
+    /* Return the in-use MQTT connection. */
+    IotStaticMemory_ReturnInUse( ptr,
+                                 _pMqttConnections,
+                                 _pInUseMqttConnections,
+                                 IOT_MQTT_CONNECTIONS,
+                                 sizeof( _mqttConnection_t ) );
+}
 
 /*-----------------------------------------------------------*/
 
-    void * IotMqtt_MallocOperation( size_t size )
-    {
-        int32_t freeIndex = -1;
-        void * pNewOperation = NULL;
+void * IotMqtt_MallocOperation( size_t size )
+{
+    int32_t freeIndex = -1;
+    void * pNewOperation = NULL;
 
-        /* Check size argument. */
-        if( size == sizeof( _mqttOperation_t ) )
+    /* Check size argument. */
+    if( size == sizeof( _mqttOperation_t ) )
+    {
+        /* Find a free MQTT operation. */
+        freeIndex = IotStaticMemory_FindFree( _pInUseMqttOperations,
+                                              IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS );
+
+        if( freeIndex != -1 )
         {
-            /* Find a free MQTT operation. */
-            freeIndex = IotStaticMemory_FindFree( _pInUseMqttOperations,
-                                                  IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS );
-
-            if( freeIndex != -1 )
-            {
-                pNewOperation = &( _pMqttOperations[ freeIndex ] );
-            }
+            pNewOperation = &( _pMqttOperations[ freeIndex ] );
         }
-
-        return pNewOperation;
     }
+
+    return pNewOperation;
+}
 
 /*-----------------------------------------------------------*/
 
-    void IotMqtt_FreeOperation( void * ptr )
-    {
-        /* Return the in-use MQTT operation. */
-        IotStaticMemory_ReturnInUse( ptr,
-                                     _pMqttOperations,
-                                     _pInUseMqttOperations,
-                                     IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS,
-                                     sizeof( _mqttOperation_t ) );
-    }
+void IotMqtt_FreeOperation( void * ptr )
+{
+    /* Return the in-use MQTT operation. */
+    IotStaticMemory_ReturnInUse( ptr,
+                                 _pMqttOperations,
+                                 _pInUseMqttOperations,
+                                 IOT_MQTT_MAX_IN_PROGRESS_OPERATIONS,
+                                 sizeof( _mqttOperation_t ) );
+}
 
 /*-----------------------------------------------------------*/
 
-    void * IotMqtt_MallocSubscription( size_t size )
-    {
-        int32_t freeIndex = -1;
-        void * pNewSubscription = NULL;
+void * IotMqtt_MallocSubscription( size_t size )
+{
+    int32_t freeIndex = -1;
+    void * pNewSubscription = NULL;
 
-        if( size <= MQTT_SUBSCRIPTION_SIZE )
+    if( size <= MQTT_SUBSCRIPTION_SIZE )
+    {
+        /* Get the index of a free MQTT subscription. */
+        freeIndex = IotStaticMemory_FindFree( _pInUseMqttSubscriptions,
+                                              IOT_MQTT_SUBSCRIPTIONS );
+
+        if( freeIndex != -1 )
         {
-            /* Get the index of a free MQTT subscription. */
-            freeIndex = IotStaticMemory_FindFree( _pInUseMqttSubscriptions,
-                                                  IOT_MQTT_SUBSCRIPTIONS );
-
-            if( freeIndex != -1 )
-            {
-                pNewSubscription = &( _pMqttSubscriptions[ freeIndex ][ 0 ] );
-            }
+            pNewSubscription = &( _pMqttSubscriptions[ freeIndex ][ 0 ] );
         }
-
-        return pNewSubscription;
     }
+
+    return pNewSubscription;
+}
 
 /*-----------------------------------------------------------*/
 
-    void IotMqtt_FreeSubscription( void * ptr )
-    {
-        /* Return the in-use MQTT subscription. */
-        IotStaticMemory_ReturnInUse( ptr,
-                                     _pMqttSubscriptions,
-                                     _pInUseMqttSubscriptions,
-                                     IOT_MQTT_SUBSCRIPTIONS,
-                                     MQTT_SUBSCRIPTION_SIZE );
-    }
+void IotMqtt_FreeSubscription( void * ptr )
+{
+    /* Return the in-use MQTT subscription. */
+    IotStaticMemory_ReturnInUse( ptr,
+                                 _pMqttSubscriptions,
+                                 _pInUseMqttSubscriptions,
+                                 IOT_MQTT_SUBSCRIPTIONS,
+                                 MQTT_SUBSCRIPTION_SIZE );
+}
 
 /*-----------------------------------------------------------*/
 
-#endif /* if IOT_STATIC_MEMORY_ONLY == 1 */
+#endif

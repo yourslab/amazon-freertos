@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,9 +18,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
@@ -34,9 +31,6 @@
 /* Standard includes. */
 #include <stdbool.h>
 #include <string.h>
-
-/* Error handling include. */
-#include "private/iot_error.h"
 
 /* MQTT internal include. */
 #include "private/iot_mqtt_internal.h"
@@ -62,10 +56,67 @@ typedef struct _topicMatchParams
 typedef struct _packetMatchParams
 {
     uint16_t packetIdentifier; /**< Packet identifier to match. */
-    int32_t order;             /**< Order to match. Set to `-1` to ignore. */
+    int32_t order;             /**< Order to match. Set to #MQTT_REMOVE_ALL_SUBSCRIPTIONS to ignore. */
 } _packetMatchParams_t;
 
 /*-----------------------------------------------------------*/
+
+/**
+ * @brief Handle special corner cases regarding wildcards at the end of topic
+ * filters, as documented by the MQTT protocol spec.
+ *
+ * @param[in] pTopicFilter The topic filter containing the wildcard.
+ * @param[in] nameIndex Index of the topic name being examined.
+ * @param[in] filterIndex Index of the topic filter being examined.
+ * @param[in] topicNameLength Length of the topic name being examined.
+ * @param[in] topicFilterLength Length of the topic filter being examined.
+ * @param[out] pMatch Whether the topic filter and topic name match.
+ *
+ * @return `true` if the caller of this function should exit; `false` if the caller
+ * should continue parsing the topics.
+ */
+static bool _matchEndWildcards( const char * pTopicFilter,
+                                uint16_t topicNameLength,
+                                uint16_t topicFilterLength,
+                                uint16_t nameIndex,
+                                uint16_t filterIndex,
+                                bool * pMatch );
+
+/**
+ * @brief Attempt to match characters in a topic filter by wildcards.
+ *
+ * @param[in] pTopicFilter The topic filter containing the wildcard.
+ * @param[in] pTopicName The topic name to check.
+ * @param[in] topicNameLength Length of the topic name.
+ * @param[in] filterIndex Index of the wildcard in the topic filter.
+ * @param[in,out] pNameIndex Index of character in topic name. This variable is
+ * advanced for `+` wildcards.
+ * @param[out] pMatch Whether the topic filter and topic name match.
+ *
+ * @return `true` if the caller of this function should exit; `false` if the caller
+ * should continue parsing the topics.
+ */
+static bool _matchWildcards( const char * pTopicFilter,
+                             const char * pTopicName,
+                             uint16_t topicNameLength,
+                             uint16_t filterIndex,
+                             uint16_t * pNameIndex,
+                             bool * pMatch );
+
+/**
+ * @brief Match a topic name and topic filter while allowing the use of wildcards.
+ *
+ * @param[in] pTopicName The topic name to check.
+ * @param[in] topicNameLength Length of `pTopicName`.
+ * @param[in] pTopicFilter The topic filter to check.
+ * @param[in] topicFilterLength Length of `pTopicFilter`.
+ *
+ * @return `true` if the topic name and topic filter match; `false` otherwise.
+ */
+static bool _topicFilterMatch( const char * pTopicName,
+                               uint16_t topicNameLength,
+                               const char * pTopicFilter,
+                               uint16_t topicFilterLength );
 
 /**
  * @brief Matches a topic name (from a publish) with a topic filter (from a
@@ -77,7 +128,7 @@ typedef struct _packetMatchParams
  * @return `true` if the arguments match the subscription topic filter; `false`
  * otherwise.
  */
-static bool _topicMatch( const IotLink_t * pSubscriptionLink,
+static bool _topicMatch( const IotLink_t * const pSubscriptionLink,
                          void * pMatch );
 
 /**
@@ -89,25 +140,166 @@ static bool _topicMatch( const IotLink_t * pSubscriptionLink,
  * @return `true` if the arguments match the subscription's packet info; `false`
  * otherwise.
  */
-static bool _packetMatch( const IotLink_t * pSubscriptionLink,
+static bool _packetMatch( const IotLink_t * const pSubscriptionLink,
                           void * pMatch );
 
 /*-----------------------------------------------------------*/
 
-static bool _topicMatch( const IotLink_t * pSubscriptionLink,
-                         void * pMatch )
+static bool _matchEndWildcards( const char * pTopicFilter,
+                                uint16_t topicNameLength,
+                                uint16_t topicFilterLength,
+                                uint16_t nameIndex,
+                                uint16_t filterIndex,
+                                bool * pMatch )
 {
-    IOT_FUNCTION_ENTRY( bool, false );
+    bool status = false, endChar = false;
+
+    /* Determine if the last character is reached for both topic name and topic
+     * filter for the '#' wildcard. */
+    endChar = ( nameIndex == ( topicNameLength - 1U ) ) && ( filterIndex == ( topicFilterLength - 3U ) );
+
+    if( endChar == true )
+    {
+        /* Determine if the topic filter ends with the '#' wildcard. */
+        status = ( pTopicFilter[ filterIndex + 2U ] == '#' );
+    }
+
+    if( status == false )
+    {
+        /* Determine if the last character is reached for both topic name and topic
+         * filter for the '+' wildcard. */
+        endChar = ( nameIndex == ( topicNameLength - 1U ) ) && ( filterIndex == ( topicFilterLength - 2U ) );
+
+        if( endChar == true )
+        {
+            /* Filter "sport/+" also matches the "sport/" but not "sport". */
+            status = ( pTopicFilter[ filterIndex + 1U ] == '+' );
+        }
+    }
+
+    *pMatch = status;
+
+    return status;
+}
+
+/*-----------------------------------------------------------*/
+
+static bool _matchWildcards( const char * pTopicFilter,
+                             const char * pTopicName,
+                             uint16_t topicNameLength,
+                             uint16_t filterIndex,
+                             uint16_t * pNameIndex,
+                             bool * pMatch )
+{
+    bool status = false;
+
+    /* Check for wildcards. */
+    if( pTopicFilter[ filterIndex ] == '+' )
+    {
+        /* Move topic name index to the end of the current level.
+         * This is identified by '/'. */
+        while( ( *pNameIndex < topicNameLength ) && ( pTopicName[ *pNameIndex ] != '/' ) )
+        {
+            ( *pNameIndex )++;
+        }
+
+        ( *pNameIndex )--;
+    }
+    else if( pTopicFilter[ filterIndex ] == '#' )
+    {
+        /* Subsequent characters don't need to be checked for the
+         * multi-level wildcard. */
+        *pMatch = true;
+        status = true;
+    }
+    else
+    {
+        /* Any character mismatch other than '+' or '#' means the topic
+         * name does not match the topic filter. */
+        *pMatch = false;
+        status = true;
+    }
+
+    return status;
+}
+
+/*-----------------------------------------------------------*/
+
+static bool _topicFilterMatch( const char * pTopicName,
+                               uint16_t topicNameLength,
+                               const char * pTopicFilter,
+                               uint16_t topicFilterLength )
+{
+    bool status = false, matchFound = false;
     uint16_t nameIndex = 0, filterIndex = 0;
 
-    /* Because this function is called from a container function, the given link
-     * must never be NULL. */
+    while( ( nameIndex < topicNameLength ) && ( filterIndex < topicFilterLength ) )
+    {
+        /* Check if the character in the topic name matches the corresponding
+         * character in the topic filter string. */
+        if( pTopicName[ nameIndex ] == pTopicFilter[ filterIndex ] )
+        {
+            /* Handle special corner cases regarding wildcards at the end of
+             * topic filters, as documented by the MQTT protocol spec. */
+            matchFound = _matchEndWildcards( pTopicFilter,
+                                             topicNameLength,
+                                             topicFilterLength,
+                                             nameIndex,
+                                             filterIndex,
+                                             &status );
+        }
+        else
+        {
+            /* Check for matching wildcards. */
+            matchFound = _matchWildcards( pTopicFilter,
+                                          pTopicName,
+                                          topicNameLength,
+                                          filterIndex,
+                                          &nameIndex,
+                                          &status );
+        }
+
+        if( matchFound == true )
+        {
+            break;
+        }
+
+        /* Increment indexes. */
+        nameIndex++;
+        filterIndex++;
+    }
+
+    if( status == false )
+    {
+        /* If the end of both strings has been reached, they match. */
+        status = ( ( nameIndex == topicNameLength ) && ( filterIndex == topicFilterLength ) );
+    }
+
+    return status;
+}
+
+/*-----------------------------------------------------------*/
+
+static bool _topicMatch( const IotLink_t * const pSubscriptionLink,
+                         void * pMatch )
+{
+    bool status = false;
+
+    /* This function is called from a container function; the caller
+     * will never pass NULL. */
     IotMqtt_Assert( pSubscriptionLink != NULL );
 
-    _mqttSubscription_t * pSubscription = IotLink_Container( _mqttSubscription_t,
-                                                             pSubscriptionLink,
-                                                             link );
-    _topicMatchParams_t * pParam = ( _topicMatchParams_t * ) pMatch;
+    /* Casting `pSubscriptionLink` to uint8_t * is done only to calculate the
+     * starting address of the struct and does not modify the link it points to.
+     * Adding parentheses to parameters of IotLink_Container is not applicable
+     * because it uses type-casting and offsetof, and would cause compiling errors. */
+    /* coverity[misra_c_2012_rule_11_8_violation] */
+    /* coverity[misra_c_2012_rule_20_7_violation] */
+    /* coverity[caretline] */
+    const _mqttSubscription_t * pSubscription = IotLink_Container( _mqttSubscription_t,
+                                                                   pSubscriptionLink,
+                                                                   link );
+    const _topicMatchParams_t * pParam = ( _topicMatchParams_t * ) pMatch;
 
     /* Extract the relevant strings and lengths from parameters. */
     const char * pTopicName = pParam->pTopicName;
@@ -119,139 +311,21 @@ static bool _topicMatch( const IotLink_t * pSubscriptionLink,
     if( topicNameLength == topicFilterLength )
     {
         status = ( strncmp( pTopicName, pTopicFilter, topicNameLength ) == 0 );
-
-        IOT_GOTO_CLEANUP();
     }
-    else
+
+    /* If  an exact match is required, return the result of the comparison above.
+     * Otherwise, attempt to match with MQTT wildcards in topic filters. */
+    if( pParam->exactMatchOnly == false )
     {
-        EMPTY_ELSE_MARKER;
+        status = _topicFilterMatch( pTopicName, topicNameLength, pTopicFilter, topicFilterLength );
     }
 
-    /* If the topic lengths are different but an exact match is required, return
-     * false. */
-    if( pParam->exactMatchOnly == true )
-    {
-        IOT_SET_AND_GOTO_CLEANUP( false );
-    }
-    else
-    {
-        EMPTY_ELSE_MARKER;
-    }
-
-    while( ( nameIndex < topicNameLength ) && ( filterIndex < topicFilterLength ) )
-    {
-        /* Check if the character in the topic name matches the corresponding
-         * character in the topic filter string. */
-        if( pTopicName[ nameIndex ] == pTopicFilter[ filterIndex ] )
-        {
-            /* Handle special corner cases as documented by the MQTT protocol spec. */
-
-            /* Filter "sport/#" also matches "sport" since # includes the parent level. */
-            if( nameIndex == topicNameLength - 1 )
-            {
-                if( filterIndex == topicFilterLength - 3 )
-                {
-                    if( pTopicFilter[ filterIndex + 1 ] == '/' )
-                    {
-                        if( pTopicFilter[ filterIndex + 2 ] == '#' )
-                        {
-                            IOT_SET_AND_GOTO_CLEANUP( true );
-                        }
-                        else
-                        {
-                            EMPTY_ELSE_MARKER;
-                        }
-                    }
-                    else
-                    {
-                        EMPTY_ELSE_MARKER;
-                    }
-                }
-                else
-                {
-                    EMPTY_ELSE_MARKER;
-                }
-            }
-            else
-            {
-                EMPTY_ELSE_MARKER;
-            }
-
-            /* Filter "sport/+" also matches the "sport/" but not "sport". */
-            if( nameIndex == topicNameLength - 1 )
-            {
-                if( filterIndex == topicFilterLength - 2 )
-                {
-                    if( pTopicFilter[ filterIndex + 1 ] == '+' )
-                    {
-                        IOT_SET_AND_GOTO_CLEANUP( true );
-                    }
-                    else
-                    {
-                        EMPTY_ELSE_MARKER;
-                    }
-                }
-                else
-                {
-                    EMPTY_ELSE_MARKER;
-                }
-            }
-            else
-            {
-                EMPTY_ELSE_MARKER;
-            }
-        }
-        else
-        {
-            /* Check for wildcards. */
-            if( pTopicFilter[ filterIndex ] == '+' )
-            {
-                /* Move topic name index to the end of the current level.
-                 * This is identified by '/'. */
-                while( nameIndex < topicNameLength && pTopicName[ nameIndex ] != '/' )
-                {
-                    nameIndex++;
-                }
-
-                /* Increment filter index to skip '/'. */
-                filterIndex++;
-                continue;
-            }
-            else if( pTopicFilter[ filterIndex ] == '#' )
-            {
-                /* Subsequent characters don't need to be checked if the for the
-                 * multi-level wildcard. */
-                IOT_SET_AND_GOTO_CLEANUP( true );
-            }
-            else
-            {
-                /* Any character mismatch other than '+' or '#' means the topic
-                 * name does not match the topic filter. */
-                IOT_SET_AND_GOTO_CLEANUP( false );
-            }
-        }
-
-        /* Increment indexes. */
-        nameIndex++;
-        filterIndex++;
-    }
-
-    /* If the end of both strings has been reached, they match. */
-    if( ( nameIndex == topicNameLength ) && ( filterIndex == topicFilterLength ) )
-    {
-        IOT_SET_AND_GOTO_CLEANUP( true );
-    }
-    else
-    {
-        EMPTY_ELSE_MARKER;
-    }
-
-    IOT_FUNCTION_EXIT_NO_CLEANUP();
+    return status;
 }
 
 /*-----------------------------------------------------------*/
 
-static bool _packetMatch( const IotLink_t * pSubscriptionLink,
+static bool _packetMatch( const IotLink_t * const pSubscriptionLink,
                           void * pMatch )
 {
     bool match = false;
@@ -260,16 +334,23 @@ static bool _packetMatch( const IotLink_t * pSubscriptionLink,
      * must never be NULL. */
     IotMqtt_Assert( pSubscriptionLink != NULL );
 
+    /* Casting `pSubscriptionLink` to uint8_t * is done only to calculate the
+     * starting address of the struct and does not modify the link it points to.
+     * Adding parentheses to parameters of IotLink_Container is not applicable
+     * because it uses type-casting and offsetof, and would cause compiling errors. */
+    /* coverity[misra_c_2012_rule_11_8_violation] */
+    /* coverity[misra_c_2012_rule_20_7_violation] */
+    /* coverity[caretline] */
     _mqttSubscription_t * pSubscription = IotLink_Container( _mqttSubscription_t,
                                                              pSubscriptionLink,
                                                              link );
-    _packetMatchParams_t * pParam = ( _packetMatchParams_t * ) pMatch;
+    const _packetMatchParams_t * pParam = ( _packetMatchParams_t * ) pMatch;
 
     /* Compare packet identifiers. */
     if( pParam->packetIdentifier == pSubscription->packetInfo.identifier )
     {
-        /* Compare orders if order is not -1. */
-        if( pParam->order == -1 )
+        /* Compare orders if order is not MQTT_REMOVE_ALL_SUBSCRIPTIONS. */
+        if( pParam->order == MQTT_REMOVE_ALL_SUBSCRIPTIONS )
         {
             match = true;
         }
@@ -295,14 +376,6 @@ static bool _packetMatch( const IotLink_t * pSubscriptionLink,
              * will remove and clean up this subscription. */
             pSubscription->unsubscribed = true;
         }
-        else
-        {
-            EMPTY_ELSE_MARKER;
-        }
-    }
-    else
-    {
-        EMPTY_ELSE_MARKER;
     }
 
     return match;
@@ -335,6 +408,10 @@ IotMqttError_t _IotMqtt_AddSubscriptions( _mqttConnection_t * pMqttConnection,
 
         if( pSubscriptionLink != NULL )
         {
+            /* Adding parentheses to parameters of IotLink_Container is not applicable
+             * because it uses type-casting and offsetof, and would cause compiling errors. */
+            /* coverity[misra_c_2012_rule_20_7_violation] */
+            /* coverity[caretline] */
             pNewSubscription = IotLink_Container( _mqttSubscription_t, pSubscriptionLink, link );
 
             /* The lengths of exactly matching topic filters must match. */
@@ -356,25 +433,23 @@ IotMqttError_t _IotMqtt_AddSubscriptions( _mqttConnection_t * pMqttConnection,
                 status = IOT_MQTT_NO_MEMORY;
                 break;
             }
-            else
-            {
-                /* Clear the new subscription. */
-                ( void ) memset( pNewSubscription,
-                                 0x00,
-                                 sizeof( _mqttSubscription_t ) + pSubscriptionList[ i ].topicFilterLength );
 
-                /* Set the members of the new subscription and add it to the list. */
-                pNewSubscription->packetInfo.identifier = subscribePacketIdentifier;
-                pNewSubscription->packetInfo.order = i;
-                pNewSubscription->callback = pSubscriptionList[ i ].callback;
-                pNewSubscription->topicFilterLength = pSubscriptionList[ i ].topicFilterLength;
-                ( void ) memcpy( pNewSubscription->pTopicFilter,
-                                 pSubscriptionList[ i ].pTopicFilter,
-                                 ( size_t ) ( pSubscriptionList[ i ].topicFilterLength ) );
+            /* Clear the new subscription. */
+            ( void ) memset( pNewSubscription,
+                             0x00,
+                             sizeof( _mqttSubscription_t ) + pSubscriptionList[ i ].topicFilterLength );
 
-                IotListDouble_InsertHead( &( pMqttConnection->subscriptionList ),
-                                          &( pNewSubscription->link ) );
-            }
+            /* Set the members of the new subscription and add it to the list. */
+            pNewSubscription->packetInfo.identifier = subscribePacketIdentifier;
+            pNewSubscription->packetInfo.order = i;
+            pNewSubscription->callback = pSubscriptionList[ i ].callback;
+            pNewSubscription->topicFilterLength = pSubscriptionList[ i ].topicFilterLength;
+            ( void ) memcpy( pNewSubscription->pTopicFilter,
+                             pSubscriptionList[ i ].pTopicFilter,
+                             ( size_t ) ( pSubscriptionList[ i ].topicFilterLength ) );
+
+            IotListDouble_InsertHead( &( pMqttConnection->subscriptionList ),
+                                      &( pNewSubscription->link ) );
         }
     }
 
@@ -386,10 +461,6 @@ IotMqttError_t _IotMqtt_AddSubscriptions( _mqttConnection_t * pMqttConnection,
         _IotMqtt_RemoveSubscriptionByTopicFilter( pMqttConnection,
                                                   pSubscriptionList,
                                                   i );
-    }
-    else
-    {
-        EMPTY_ELSE_MARKER;
     }
 
     return status;
@@ -404,14 +475,14 @@ void _IotMqtt_InvokeSubscriptionCallback( _mqttConnection_t * pMqttConnection,
     IotLink_t * pCurrentLink = NULL, * pNextLink = NULL;
     void * pCallbackContext = NULL;
 
-    void ( * callbackFunction )( void *,
-                                 IotMqttCallbackParam_t * ) = NULL;
-    _topicMatchParams_t topicMatchParams =
-    {
-        .pTopicName      = pCallbackParam->u.message.info.pTopicName,
-        .topicNameLength = pCallbackParam->u.message.info.topicNameLength,
-        .exactMatchOnly  = false
-    };
+    void ( * callbackFunction )( void * pContext,
+                                 IotMqttCallbackParam_t * pParam ) = NULL;
+    _topicMatchParams_t topicMatchParams = { 0 };
+
+    /* Set the members of the search parameter. */
+    topicMatchParams.pTopicName = pCallbackParam->u.message.info.pTopicName;
+    topicMatchParams.topicNameLength = pCallbackParam->u.message.info.topicNameLength;
+    topicMatchParams.exactMatchOnly = false;
 
     /* Prevent any other thread from modifying the subscription list while this
      * function is searching. */
@@ -431,12 +502,13 @@ void _IotMqtt_InvokeSubscriptionCallback( _mqttConnection_t * pMqttConnection,
         {
             break;
         }
-        else
-        {
-            EMPTY_ELSE_MARKER;
-        }
 
         /* Subscription found. Calculate pointer to subscription object. */
+
+        /* Adding parentheses to parameters of IotLink_Container is not applicable
+         * because it uses type-casting and offsetof, and would cause compiling errors. */
+        /* coverity[misra_c_2012_rule_20_7_violation] */
+        /* coverity[caretline] */
         pSubscription = IotLink_Container( _mqttSubscription_t, pCurrentLink, link );
 
         /* Subscription validation should not have allowed a NULL callback function. */
@@ -483,14 +555,6 @@ void _IotMqtt_InvokeSubscriptionCallback( _mqttConnection_t * pMqttConnection,
             {
                 IotMqtt_FreeSubscription( pSubscription );
             }
-            else
-            {
-                EMPTY_ELSE_MARKER;
-            }
-        }
-        else
-        {
-            EMPTY_ELSE_MARKER;
         }
 
         /* Move current link pointer. */
@@ -508,11 +572,11 @@ void _IotMqtt_RemoveSubscriptionByPacket( _mqttConnection_t * pMqttConnection,
                                           uint16_t packetIdentifier,
                                           int32_t order )
 {
-    const _packetMatchParams_t packetMatchParams =
-    {
-        .packetIdentifier = packetIdentifier,
-        .order            = order
-    };
+    _packetMatchParams_t packetMatchParams = { 0 };
+
+    /* Set the members of the search parameter. */
+    packetMatchParams.packetIdentifier = packetIdentifier;
+    packetMatchParams.order = order;
 
     IotMutex_Lock( &( pMqttConnection->subscriptionMutex ) );
     IotListDouble_RemoveAllMatches( &( pMqttConnection->subscriptionList ),
@@ -552,6 +616,10 @@ void _IotMqtt_RemoveSubscriptionByTopicFilter( _mqttConnection_t * pMqttConnecti
 
         if( pSubscriptionLink != NULL )
         {
+            /* Adding parentheses to parameters of IotLink_Container is not applicable
+             * because it uses type-casting and offsetof, and would cause compiling errors. */
+            /* coverity[misra_c_2012_rule_20_7_violation] */
+            /* coverity[caretline] */
             pSubscription = IotLink_Container( _mqttSubscription_t, pSubscriptionLink, link );
 
             /* Reference count must not be negative. */
@@ -574,10 +642,6 @@ void _IotMqtt_RemoveSubscriptionByTopicFilter( _mqttConnection_t * pMqttConnecti
                 IotMqtt_FreeSubscription( pSubscription );
             }
         }
-        else
-        {
-            EMPTY_ELSE_MARKER;
-        }
     }
 
     IotMutex_Unlock( &( pMqttConnection->subscriptionMutex ) );
@@ -588,31 +652,45 @@ void _IotMqtt_RemoveSubscriptionByTopicFilter( _mqttConnection_t * pMqttConnecti
 bool IotMqtt_IsSubscribed( IotMqttConnection_t mqttConnection,
                            const char * pTopicFilter,
                            uint16_t topicFilterLength,
-                           IotMqttSubscription_t * pCurrentSubscription )
+                           IotMqttSubscription_t * const pCurrentSubscription )
 {
     bool status = false;
-    _mqttSubscription_t * pSubscription = NULL;
-    IotLink_t * pSubscriptionLink = NULL;
-    _topicMatchParams_t topicMatchParams =
-    {
-        .pTopicName      = pTopicFilter,
-        .topicNameLength = topicFilterLength,
-        .exactMatchOnly  = true
-    };
+    const _mqttSubscription_t * pSubscription = NULL;
+    const IotLink_t * pSubscriptionLink = NULL;
+    _topicMatchParams_t topicMatchParams = { 0 };
+
+    /* Set the members of the search parameter. */
+    topicMatchParams.pTopicName = pTopicFilter;
+    topicMatchParams.topicNameLength = topicFilterLength;
+    topicMatchParams.exactMatchOnly = true;
 
     /* Prevent any other thread from modifying the subscription list while this
      * function is running. */
     IotMutex_Lock( &( mqttConnection->subscriptionMutex ) );
 
-    /* Search for a matching subscription. */
-    pSubscriptionLink = IotListDouble_FindFirstMatch( &( mqttConnection->subscriptionList ),
-                                                      NULL,
-                                                      _topicMatch,
-                                                      &topicMatchParams );
+    if( pTopicFilter == NULL )
+    {
+        IotLogError( "Topic filter must be set." );
+    }
+    else
+    {
+        /* Search for a matching subscription. */
+        pSubscriptionLink = IotListDouble_FindFirstMatch( &( mqttConnection->subscriptionList ),
+                                                          NULL,
+                                                          _topicMatch,
+                                                          &topicMatchParams );
+    }
 
     /* Check if a matching subscription was found. */
     if( pSubscriptionLink != NULL )
     {
+        /* Casting `pSubscriptionLink` to uint8_t * is done only to calculate the
+         * starting address of the struct and does not modify the link it points to.
+         * Adding parentheses to parameters of IotLink_Container is not applicable
+         * because it uses type-casting and offsetof, and would cause compiling errors. */
+        /* coverity[misra_c_2012_rule_11_8_violation] */
+        /* coverity[misra_c_2012_rule_20_7_violation] */
+        /* coverity[caretline] */
         pSubscription = IotLink_Container( _mqttSubscription_t, pSubscriptionLink, link );
 
         /* Copy the matching subscription to the output parameter. */
@@ -623,16 +701,8 @@ bool IotMqtt_IsSubscribed( IotMqttConnection_t mqttConnection,
             pCurrentSubscription->qos = IOT_MQTT_QOS_0;
             pCurrentSubscription->callback = pSubscription->callback;
         }
-        else
-        {
-            EMPTY_ELSE_MARKER;
-        }
 
         status = true;
-    }
-    else
-    {
-        EMPTY_ELSE_MARKER;
     }
 
     IotMutex_Unlock( &( mqttConnection->subscriptionMutex ) );
@@ -643,6 +713,9 @@ bool IotMqtt_IsSubscribed( IotMqttConnection_t mqttConnection,
 /*-----------------------------------------------------------*/
 
 /* Provide access to internal functions and variables if testing. */
+/* IOT_BUILD_TESTS is defined outside the code base, e.g. passed in by build command. */
+/* coverity[misra_c_2012_rule_20_9_violation] */
+/* coverity[caretline] */
 #if IOT_BUILD_TESTS == 1
     #include "iot_test_access_mqtt_subscription.c"
 #endif

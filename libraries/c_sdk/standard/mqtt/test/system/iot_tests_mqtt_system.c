@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,9 +18,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
@@ -62,16 +59,19 @@
 #ifndef IOT_TEST_MQTT_TIMEOUT_MS
     #define IOT_TEST_MQTT_TIMEOUT_MS             ( 5000 )
 #endif
-#ifndef IOT_TEST_MQTT_TOPIC_PREFIX
-    #define IOT_TEST_MQTT_TOPIC_PREFIX           "iotmqtttest"
-#endif
 #ifndef IOT_TEST_MQTT_CONNECT_RETRY_COUNT
     #define IOT_TEST_MQTT_CONNECT_RETRY_COUNT    ( 1 )
+#endif
+#ifndef IOT_TEST_MQTT_PUBLISH_RETRY_COUNT
+    #define IOT_TEST_MQTT_PUBLISH_RETRY_COUNT    ( 3 )
 #endif
 /** @endcond */
 
 #if IOT_TEST_MQTT_CONNECT_RETRY_COUNT < 1
     #error "IOT_TEST_MQTT_CONNECT_RETRY_COUNT must be at least 1."
+#endif
+#if IOT_TEST_MQTT_PUBLISH_RETRY_COUNT < 0
+    #error "IOT_TEST_MQTT_CONNECT_RETRY_COUNT must be at least 0."
 #endif
 
 /**
@@ -98,6 +98,21 @@
     #define CLIENT_IDENTIFIER_MAX_LENGTH    ( 24 )
 #endif
 
+/**
+ * @brief Generates a topic by suffixing the client identifier with a suffix.
+ *
+ * @param[in] bufferName The name of the buffer for the topic.
+ * @param[in] suffix The suffix to place at the end of the client identifier.
+ */
+#define GENERATE_TOPIC_WITH_SUFFIX( bufferName, suffix )                        \
+    char bufferName[ CLIENT_IDENTIFIER_MAX_LENGTH + sizeof( suffix ) ] = { 0 }; \
+    ( void ) snprintf( bufferName,                                              \
+                       CLIENT_IDENTIFIER_MAX_LENGTH + sizeof( suffix ),         \
+                       "%s%s",                                                  \
+                       _pClientIdentifier,                                      \
+                       suffix );
+
+
 /*-----------------------------------------------------------*/
 
 /**
@@ -115,13 +130,13 @@ typedef struct _operationCompleteParams
 /**
  * @brief Network server info to share among the tests.
  */
-static const IotTestNetworkServerInfo_t _serverInfo = IOT_TEST_NETWORK_SERVER_INFO_INITIALIZER;
+static const struct IotNetworkServerInfo _serverInfo = IOT_TEST_NETWORK_SERVER_INFO_INITIALIZER;
 
 /**
  * @brief Network credential info to share among the tests.
  */
 #if IOT_TEST_SECURED_CONNECTION == 1
-    static const IotTestNetworkCredentials_t _credentials = IOT_TEST_NETWORK_CREDENTIALS_INITIALIZER;
+    static const struct IotNetworkCredentials _credentials = IOT_TEST_NETWORK_CREDENTIALS_INITIALIZER;
 #endif
 
 /**
@@ -227,12 +242,7 @@ static IotMqttError_t _mqttConnect( const IotMqttNetworkInfo_t * pNetworkInfo,
                                     IotMqttConnection_t * const pMqttConnection )
 {
     IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
-
     int32_t retryCount = 0;
-
-    /* AWS IoT Service limits only allow 1 connection per MQTT client ID per second.
-     * Wait until 1100 ms have elapsed since the last connection. */
-    uint32_t periodMs = 1100;
 
     for( ; retryCount < IOT_TEST_MQTT_CONNECT_RETRY_COUNT; retryCount++ )
     {
@@ -241,8 +251,10 @@ static IotMqttError_t _mqttConnect( const IotMqttNetworkInfo_t * pNetworkInfo,
         #if ( IOT_TEST_MQTT_CONNECT_RETRY_COUNT > 1 )
             if( ( status == IOT_MQTT_NETWORK_ERROR ) || ( status == IOT_MQTT_TIMEOUT ) )
             {
-                IotClock_SleepMs( periodMs );
-                periodMs *= 2;
+                /* AWS IoT Service limits only allow 1 connection per MQTT client ID per second.
+                 * Initially wait until 1100 ms have elapsed since the last connection, then
+                 * increase exponentially. */
+                IotClock_SleepMs( 1100 << retryCount );
             }
             else
             {
@@ -417,86 +429,6 @@ static void _operationComplete( void * pArgument,
 /*-----------------------------------------------------------*/
 
 /**
- * @brief Callback that makes additional MQTT API calls.
- */
-static void _reentrantCallback( void * pArgument,
-                                IotMqttCallbackParam_t * pOperation )
-{
-    bool status = true;
-    IotMqttError_t mqttStatus = IOT_MQTT_STATUS_PENDING;
-    IotSemaphore_t * pWaitSemaphores = ( IotSemaphore_t * ) pArgument;
-    IotMqttPublishInfo_t publishInfo = IOT_MQTT_PUBLISH_INFO_INITIALIZER;
-    IotMqttSubscription_t subscription = IOT_MQTT_SUBSCRIPTION_INITIALIZER;
-    IotMqttOperation_t unsubscribeOperation = IOT_MQTT_OPERATION_INITIALIZER;
-
-    /* Topic used in this test. */
-    const char * const pTopic = IOT_TEST_MQTT_TOPIC_PREFIX "/Reentrancy";
-    const uint16_t topicLength = ( uint16_t ) strlen( pTopic );
-
-    publishInfo.qos = IOT_MQTT_QOS_1;
-    publishInfo.pTopicName = pTopic;
-    publishInfo.topicNameLength = topicLength;
-    publishInfo.pPayload = _pSamplePayload;
-    publishInfo.payloadLength = _samplePayloadLength;
-    publishInfo.retryLimit = 3;
-    publishInfo.retryMs = 5000;
-
-    mqttStatus = IotMqtt_TimedPublish( pOperation->mqttConnection,
-                                       &publishInfo,
-                                       0,
-                                       IOT_TEST_MQTT_TIMEOUT_MS );
-
-    if( mqttStatus == IOT_MQTT_SUCCESS )
-    {
-        status = IotSemaphore_TimedWait( &( pWaitSemaphores[ 0 ] ),
-                                         IOT_TEST_MQTT_TIMEOUT_MS );
-    }
-    else
-    {
-        status = false;
-    }
-
-    /* Remove subscription and disconnect. */
-    if( status == true )
-    {
-        subscription.pTopicFilter = pTopic;
-        subscription.topicFilterLength = topicLength;
-
-        mqttStatus = IotMqtt_Unsubscribe( pOperation->mqttConnection,
-                                          &subscription,
-                                          1,
-                                          IOT_MQTT_FLAG_WAITABLE,
-                                          NULL,
-                                          &unsubscribeOperation );
-
-        if( mqttStatus == IOT_MQTT_STATUS_PENDING )
-        {
-            /* Disconnect the MQTT connection. */
-            IotMqtt_Disconnect( pOperation->mqttConnection, 0 );
-
-            /* Waiting on an operation whose connection is closed should return
-             * "Network Error". */
-            mqttStatus = IotMqtt_Wait( unsubscribeOperation,
-                                       500 );
-
-            status = ( mqttStatus == IOT_MQTT_NETWORK_ERROR );
-        }
-        else
-        {
-            status = false;
-        }
-    }
-
-    /* Disconnect and unblock the main test thread. */
-    if( status == true )
-    {
-        IotSemaphore_Post( &( pWaitSemaphores[ 1 ] ) );
-    }
-}
-
-/*-----------------------------------------------------------*/
-
-/**
  * @brief Run the subscribe-publish-wait tests at various QoS.
  */
 static void _subscribePublishWait( IotMqttQos_t qos )
@@ -529,6 +461,9 @@ static void _subscribePublishWait( IotMqttQos_t qos )
     /* Set the serializer function pointers. */
     networkInfo.pMqttSerializer = &serializer;
 
+    /* The topic to use for this test. */
+    GENERATE_TOPIC_WITH_SUFFIX( pTopic, "/SubscribePublishWait" );
+
     /* Create the wait semaphore. */
     TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &waitSem, 0, 1 ) );
 
@@ -551,32 +486,34 @@ static void _subscribePublishWait( IotMqttQos_t qos )
         {
             /* Set the members of the subscription. */
             subscription.qos = qos;
-            subscription.pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/SubscribePublishWait";
+            subscription.pTopicFilter = pTopic;
             subscription.topicFilterLength = ( uint16_t ) strlen( subscription.pTopicFilter );
             subscription.callback.function = _publishReceived;
             subscription.callback.pCallbackContext = &waitSem;
 
             /* Subscribe to the test topic filter using the blocking SUBSCRIBE
              * function. */
-            status = IotMqtt_TimedSubscribe( _mqttConnection,
-                                             &subscription,
-                                             1,
-                                             0,
-                                             IOT_TEST_MQTT_TIMEOUT_MS );
+            status = IotMqtt_SubscribeSync( _mqttConnection,
+                                            &subscription,
+                                            1,
+                                            0,
+                                            IOT_TEST_MQTT_TIMEOUT_MS );
             TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
             /* Set the members of the publish info. */
             publishInfo.qos = qos;
-            publishInfo.pTopicName = IOT_TEST_MQTT_TOPIC_PREFIX "/SubscribePublishWait";
+            publishInfo.pTopicName = pTopic;
             publishInfo.topicNameLength = ( uint16_t ) strlen( publishInfo.pTopicName );
             publishInfo.pPayload = _pSamplePayload;
             publishInfo.payloadLength = _samplePayloadLength;
+            publishInfo.retryLimit = IOT_TEST_MQTT_PUBLISH_RETRY_COUNT;
+            publishInfo.retryMs = IOT_TEST_MQTT_TIMEOUT_MS;
 
             /* Publish the message. */
-            status = IotMqtt_TimedPublish( _mqttConnection,
-                                           &publishInfo,
-                                           0,
-                                           IOT_TEST_MQTT_TIMEOUT_MS );
+            status = IotMqtt_PublishSync( _mqttConnection,
+                                          &publishInfo,
+                                          0,
+                                          IOT_TEST_MQTT_TIMEOUT_MS );
 
             /* Wait for the message to be received. */
             if( IotSemaphore_TimedWait( &waitSem,
@@ -586,11 +523,11 @@ static void _subscribePublishWait( IotMqttQos_t qos )
             }
 
             /* Unsubscribe from the test topic filter. */
-            status = IotMqtt_TimedUnsubscribe( _mqttConnection,
-                                               &subscription,
-                                               1,
-                                               0,
-                                               IOT_TEST_MQTT_TIMEOUT_MS );
+            status = IotMqtt_UnsubscribeSync( _mqttConnection,
+                                              &subscription,
+                                              1,
+                                              0,
+                                              IOT_TEST_MQTT_TIMEOUT_MS );
             TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
         }
 
@@ -720,8 +657,7 @@ TEST_GROUP_RUNNER( MQTT_System )
     RUN_TEST_CASE( MQTT_System, SubscribePublishAsync );
     RUN_TEST_CASE( MQTT_System, LastWillAndTestament );
     RUN_TEST_CASE( MQTT_System, RestorePreviousSession );
-    RUN_TEST_CASE( MQTT_System, SubscribeCompleteReentrancy );
-    RUN_TEST_CASE( MQTT_System, IncomingPublishReentrancy )
+    RUN_TEST_CASE( MQTT_System, WaitAfterDisconnect );
 }
 
 /*-----------------------------------------------------------*/
@@ -759,12 +695,15 @@ TEST( MQTT_System, SubscribePublishAsync )
     _operationCompleteParams_t callbackParam = { .expectedOperation = ( IotMqttOperationType_t ) 0 };
     IotSemaphore_t publishWaitSem;
 
+    /* The topic to use for this test. */
+    GENERATE_TOPIC_WITH_SUFFIX( pTopic, "/SubscribePublishAsync" );
+
     /* Initialize members of the operation callback info. */
     callbackInfo.function = _operationComplete;
     callbackInfo.pCallbackContext = &callbackParam;
 
     /* Initialize members of the subscription. */
-    subscription.pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/SubscribePublishAsync";
+    subscription.pTopicFilter = pTopic;
     subscription.topicFilterLength = ( uint16_t ) strlen( subscription.pTopicFilter );
     subscription.callback.function = _publishReceived;
     subscription.callback.pCallbackContext = &publishWaitSem;
@@ -777,7 +716,7 @@ TEST( MQTT_System, SubscribePublishAsync )
 
     /* Initialize members of the publish info. */
     publishInfo.qos = IOT_MQTT_QOS_1;
-    publishInfo.pTopicName = IOT_TEST_MQTT_TOPIC_PREFIX "/SubscribePublishAsync";
+    publishInfo.pTopicName = pTopic;
     publishInfo.topicNameLength = ( uint16_t ) strlen( publishInfo.pTopicName );
     publishInfo.pPayload = _pSamplePayload;
     publishInfo.payloadLength = _samplePayloadLength;
@@ -803,12 +742,12 @@ TEST( MQTT_System, SubscribePublishAsync )
             {
                 /* Subscribe to the test topic filter. */
                 callbackParam.expectedOperation = IOT_MQTT_SUBSCRIBE;
-                status = IotMqtt_Subscribe( _mqttConnection,
-                                            &subscription,
-                                            1,
-                                            0,
-                                            &callbackInfo,
-                                            &( callbackParam.operation ) );
+                status = IotMqtt_SubscribeAsync( _mqttConnection,
+                                                 &subscription,
+                                                 1,
+                                                 0,
+                                                 &callbackInfo,
+                                                 &( callbackParam.operation ) );
 
                 if( IotSemaphore_TimedWait( &( callbackParam.waitSem ),
                                             IOT_TEST_MQTT_TIMEOUT_MS ) == false )
@@ -818,11 +757,11 @@ TEST( MQTT_System, SubscribePublishAsync )
 
                 /* Publish the message. */
                 callbackParam.expectedOperation = IOT_MQTT_PUBLISH_TO_SERVER;
-                status = IotMqtt_Publish( _mqttConnection,
-                                          &publishInfo,
-                                          0,
-                                          &callbackInfo,
-                                          &( callbackParam.operation ) );
+                status = IotMqtt_PublishAsync( _mqttConnection,
+                                               &publishInfo,
+                                               0,
+                                               &callbackInfo,
+                                               &( callbackParam.operation ) );
 
                 if( IotSemaphore_TimedWait( &( callbackParam.waitSem ),
                                             IOT_TEST_MQTT_TIMEOUT_MS ) == false )
@@ -839,12 +778,12 @@ TEST( MQTT_System, SubscribePublishAsync )
 
                 /* Unsubscribe from the test topic filter. */
                 callbackParam.expectedOperation = IOT_MQTT_UNSUBSCRIBE;
-                status = IotMqtt_Unsubscribe( _mqttConnection,
-                                              &subscription,
-                                              1,
-                                              0,
-                                              &callbackInfo,
-                                              &( callbackParam.operation ) );
+                status = IotMqtt_UnsubscribeAsync( _mqttConnection,
+                                                   &subscription,
+                                                   1,
+                                                   0,
+                                                   &callbackInfo,
+                                                   &( callbackParam.operation ) );
 
                 if( IotSemaphore_TimedWait( &( callbackParam.waitSem ),
                                             IOT_TEST_MQTT_TIMEOUT_MS ) == false )
@@ -878,6 +817,9 @@ TEST( MQTT_System, LastWillAndTestament )
     IotMqttSubscription_t willSubscription = IOT_MQTT_SUBSCRIPTION_INITIALIZER;
     IotMqttPublishInfo_t willInfo = IOT_MQTT_PUBLISH_INFO_INITIALIZER;
     IotSemaphore_t waitSem;
+
+    /* The topic to use for this test. */
+    GENERATE_TOPIC_WITH_SUFFIX( pTopic, "/LastWillAndTestament" );
 
     /* Create the wait semaphore. */
     TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &waitSem, 0, 1 ) );
@@ -921,16 +863,16 @@ TEST( MQTT_System, LastWillAndTestament )
         if( TEST_PROTECT() )
         {
             /* Register a subscription for the LWT. */
-            willSubscription.pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/LastWillAndTestament";
+            willSubscription.pTopicFilter = pTopic;
             willSubscription.topicFilterLength = ( uint16_t ) strlen( willSubscription.pTopicFilter );
             willSubscription.callback.function = _publishReceived;
             willSubscription.callback.pCallbackContext = &waitSem;
 
-            status = IotMqtt_TimedSubscribe( lwtListener,
-                                             &willSubscription,
-                                             1,
-                                             0,
-                                             IOT_TEST_MQTT_TIMEOUT_MS );
+            status = IotMqtt_SubscribeSync( lwtListener,
+                                            &willSubscription,
+                                            1,
+                                            0,
+                                            IOT_TEST_MQTT_TIMEOUT_MS );
             TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
             /* Create a connection that requests the LWT. */
@@ -940,7 +882,7 @@ TEST( MQTT_System, LastWillAndTestament )
             connectInfo.clientIdentifierLength = ( uint16_t ) strlen( _pClientIdentifier );
             connectInfo.pWillInfo = &willInfo;
 
-            willInfo.pTopicName = IOT_TEST_MQTT_TOPIC_PREFIX "/LastWillAndTestament";
+            willInfo.pTopicName = pTopic;
             willInfo.topicNameLength = ( uint16_t ) strlen( willInfo.pTopicName );
             willInfo.pPayload = _pSamplePayload;
             willInfo.payloadLength = _samplePayloadLength;
@@ -982,6 +924,9 @@ TEST( MQTT_System, RestorePreviousSession )
     IotMqttPublishInfo_t publishInfo = IOT_MQTT_PUBLISH_INFO_INITIALIZER;
     IotSemaphore_t waitSem;
 
+    /* The topic to use for this test. */
+    GENERATE_TOPIC_WITH_SUFFIX( pTopic, "/RestorePreviousSession" );
+
     /* Create the wait semaphore for operations. */
     TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &waitSem, 0, 1 ) );
 
@@ -1000,16 +945,16 @@ TEST( MQTT_System, RestorePreviousSession )
         TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
         /* Add a subscription. */
-        subscription.pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/RestorePreviousSession";
+        subscription.pTopicFilter = pTopic;
         subscription.topicFilterLength = ( uint16_t ) strlen( subscription.pTopicFilter );
         subscription.callback.pCallbackContext = &waitSem;
         subscription.callback.function = _publishReceived;
 
-        status = IotMqtt_TimedSubscribe( _mqttConnection,
-                                         &subscription,
-                                         1,
-                                         0,
-                                         IOT_TEST_MQTT_TIMEOUT_MS );
+        status = IotMqtt_SubscribeSync( _mqttConnection,
+                                        &subscription,
+                                        1,
+                                        0,
+                                        IOT_TEST_MQTT_TIMEOUT_MS );
         TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
         /* Disconnect the MQTT connection and clean up network connection. */
@@ -1028,15 +973,15 @@ TEST( MQTT_System, RestorePreviousSession )
         TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
         /* Publish a message to the subscription added in the previous session. */
-        publishInfo.pTopicName = IOT_TEST_MQTT_TOPIC_PREFIX "/RestorePreviousSession";
+        publishInfo.pTopicName = pTopic;
         publishInfo.topicNameLength = ( uint16_t ) strlen( publishInfo.pTopicName );
         publishInfo.pPayload = _pSamplePayload;
         publishInfo.payloadLength = _samplePayloadLength;
 
-        status = IotMqtt_TimedPublish( _mqttConnection,
-                                       &publishInfo,
-                                       0,
-                                       IOT_TEST_MQTT_TIMEOUT_MS );
+        status = IotMqtt_PublishSync( _mqttConnection,
+                                      &publishInfo,
+                                      0,
+                                      IOT_TEST_MQTT_TIMEOUT_MS );
         TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
         /* Wait for the message to be received. */
@@ -1082,162 +1027,67 @@ TEST( MQTT_System, RestorePreviousSession )
 /*-----------------------------------------------------------*/
 
 /**
- * @brief Test that API functions can be invoked from a callback for a completed
- * subscription operation.
+ * @brief Test that Wait can be safely invoked after Disconnect.
  */
-TEST( MQTT_System, SubscribeCompleteReentrancy )
+TEST( MQTT_System, WaitAfterDisconnect )
 {
+    int32_t i = 0;
     IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
     IotMqttConnectInfo_t connectInfo = IOT_MQTT_CONNECT_INFO_INITIALIZER;
-    IotMqttSubscription_t subscription = IOT_MQTT_SUBSCRIPTION_INITIALIZER;
-    IotMqttCallbackInfo_t callbackInfo = IOT_MQTT_CALLBACK_INFO_INITIALIZER;
-
-    /* Two semaphores are needed for this test: one for incoming PUBLISH and one
-     * for test completion. */
-    IotSemaphore_t pWaitSemaphores[ 2 ];
-
-    /* Create the semaphores. */
-    TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( pWaitSemaphores[ 0 ] ), 0, 1 ) );
-
-    if( TEST_PROTECT() )
-    {
-        TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( pWaitSemaphores[ 1 ] ), 0, 1 ) );
-
-        if( TEST_PROTECT() )
-        {
-            connectInfo.awsIotMqttMode = AWS_IOT_MQTT_SERVER;
-            connectInfo.pClientIdentifier = _pClientIdentifier;
-            connectInfo.clientIdentifierLength = ( uint16_t ) strlen( _pClientIdentifier );
-
-            if( TEST_PROTECT() )
-            {
-                /* Establish the MQTT connection. */
-                status = _mqttConnect( &_networkInfo,
-                                       &connectInfo,
-                                       IOT_TEST_MQTT_TIMEOUT_MS,
-                                       &_mqttConnection );
-                TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
-
-                /* Subscribe with a completion callback. */
-                subscription.qos = IOT_MQTT_QOS_1;
-                subscription.pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/Reentrancy";
-                subscription.topicFilterLength = ( uint16_t ) strlen( subscription.pTopicFilter );
-                subscription.callback.function = _publishReceived;
-                subscription.callback.pCallbackContext = &( pWaitSemaphores[ 0 ] );
-
-                callbackInfo.function = _reentrantCallback;
-                callbackInfo.pCallbackContext = pWaitSemaphores;
-
-                status = IotMqtt_Subscribe( _mqttConnection,
-                                            &subscription,
-                                            1,
-                                            0,
-                                            &callbackInfo,
-                                            NULL );
-                TEST_ASSERT_EQUAL( IOT_MQTT_STATUS_PENDING, status );
-
-                /* Wait for the reentrant callback to complete. */
-                if( IotSemaphore_TimedWait( &( pWaitSemaphores[ 1 ] ),
-                                            IOT_TEST_MQTT_TIMEOUT_MS ) == false )
-                {
-                    TEST_FAIL_MESSAGE( "Timed out waiting for reentrant callback." );
-                }
-            }
-        }
-
-        IotSemaphore_Destroy( &( pWaitSemaphores[ 1 ] ) );
-    }
-
-    IotSemaphore_Destroy( &( pWaitSemaphores[ 0 ] ) );
-}
-
-/*-----------------------------------------------------------*/
-
-/**
- * @brief Test that API functions can be invoked from a callback for an incoming
- * PUBLISH.
- */
-TEST( MQTT_System, IncomingPublishReentrancy )
-{
-    IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
-    IotMqttConnectInfo_t connectInfo = IOT_MQTT_CONNECT_INFO_INITIALIZER;
-    IotMqttSubscription_t pSubscription[ 2 ] = { IOT_MQTT_SUBSCRIPTION_INITIALIZER };
     IotMqttPublishInfo_t publishInfo = IOT_MQTT_PUBLISH_INFO_INITIALIZER;
+    IotMqttOperation_t pPublishOperation[ 3 ] = { IOT_MQTT_OPERATION_INITIALIZER };
 
-    /* Two semaphores are needed for this test: one for incoming PUBLISH and one
-     * for test completion. */
-    IotSemaphore_t pWaitSemaphores[ 2 ];
+    /* Set the client identifier and length. */
+    connectInfo.awsIotMqttMode = AWS_IOT_MQTT_SERVER;
+    connectInfo.pClientIdentifier = _pClientIdentifier;
+    connectInfo.clientIdentifierLength = ( uint16_t ) strlen( _pClientIdentifier );
 
-    /* Create the semaphores. */
-    TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( pWaitSemaphores[ 0 ] ), 0, 1 ) );
+    /* The topic to use for this test. */
+    GENERATE_TOPIC_WITH_SUFFIX( pTopic, "/WaitAfterDisconnect" );
+
+    /* Set the members of the publish info. */
+    publishInfo.qos = IOT_MQTT_QOS_1;
+    publishInfo.pTopicName = pTopic;
+    publishInfo.topicNameLength = ( uint16_t ) strlen( publishInfo.pTopicName );
+    publishInfo.pPayload = _pSamplePayload;
+    publishInfo.payloadLength = _samplePayloadLength;
+    publishInfo.retryLimit = IOT_TEST_MQTT_PUBLISH_RETRY_COUNT;
+    publishInfo.retryMs = IOT_TEST_MQTT_TIMEOUT_MS;
+
+    /* Establish the MQTT connection. */
+    status = _mqttConnect( &_networkInfo,
+                           &connectInfo,
+                           IOT_TEST_MQTT_TIMEOUT_MS,
+                           &_mqttConnection );
+    TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
 
     if( TEST_PROTECT() )
     {
-        TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( pWaitSemaphores[ 1 ] ), 0, 1 ) );
-
-        if( TEST_PROTECT() )
+        /* Publish a sequence of messages. */
+        for( i = 0; i < 3; i++ )
         {
-            connectInfo.awsIotMqttMode = AWS_IOT_MQTT_SERVER;
-            connectInfo.pClientIdentifier = _pClientIdentifier;
-            connectInfo.clientIdentifierLength = ( uint16_t ) strlen( _pClientIdentifier );
-
-            if( TEST_PROTECT() )
-            {
-                /* Establish the MQTT connection. */
-                status = _mqttConnect( &_networkInfo,
-                                       &connectInfo,
-                                       IOT_TEST_MQTT_TIMEOUT_MS,
-                                       &_mqttConnection );
-                TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
-
-                /* Subscribe with to the test topics. */
-                pSubscription[ 0 ].qos = IOT_MQTT_QOS_1;
-                pSubscription[ 0 ].pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/IncomingPublishReentrancy";
-                pSubscription[ 0 ].topicFilterLength = ( uint16_t ) strlen( pSubscription[ 0 ].pTopicFilter );
-                pSubscription[ 0 ].callback.function = _reentrantCallback;
-                pSubscription[ 0 ].callback.pCallbackContext = pWaitSemaphores;
-
-                pSubscription[ 1 ].qos = IOT_MQTT_QOS_1;
-                pSubscription[ 1 ].pTopicFilter = IOT_TEST_MQTT_TOPIC_PREFIX "/Reentrancy";
-                pSubscription[ 1 ].topicFilterLength = ( uint16_t ) strlen( pSubscription[ 1 ].pTopicFilter );
-                pSubscription[ 1 ].callback.function = _publishReceived;
-                pSubscription[ 1 ].callback.pCallbackContext = &( pWaitSemaphores[ 0 ] );
-
-                status = IotMqtt_TimedSubscribe( _mqttConnection,
-                                                 pSubscription,
-                                                 2,
-                                                 0,
-                                                 IOT_TEST_MQTT_TIMEOUT_MS );
-                TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
-
-                /* Publish a message to the test topic. */
-                publishInfo.qos = IOT_MQTT_QOS_1;
-                publishInfo.pTopicName = IOT_TEST_MQTT_TOPIC_PREFIX "/IncomingPublishReentrancy";
-                publishInfo.topicNameLength = ( uint16_t ) strlen( publishInfo.pTopicName );
-                publishInfo.pPayload = _pSamplePayload;
-                publishInfo.payloadLength = _samplePayloadLength;
-                publishInfo.retryLimit = 3;
-                publishInfo.retryMs = 5000;
-
-                status = IotMqtt_TimedPublish( _mqttConnection,
-                                               &publishInfo,
-                                               0,
-                                               IOT_TEST_MQTT_TIMEOUT_MS );
-                TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, status );
-
-                /* Wait for the reentrant callback to complete. */
-                if( IotSemaphore_TimedWait( &( pWaitSemaphores[ 1 ] ),
-                                            IOT_TEST_MQTT_TIMEOUT_MS ) == false )
-                {
-                    TEST_FAIL_MESSAGE( "Timed out waiting for reentrant callback." );
-                }
-            }
+            status = IotMqtt_PublishAsync( _mqttConnection,
+                                           &publishInfo,
+                                           IOT_MQTT_FLAG_WAITABLE,
+                                           NULL,
+                                           &( pPublishOperation[ i ] ) );
+            TEST_ASSERT_EQUAL( IOT_MQTT_STATUS_PENDING, status );
         }
-
-        IotSemaphore_Destroy( &( pWaitSemaphores[ 1 ] ) );
     }
 
-    IotSemaphore_Destroy( &( pWaitSemaphores[ 0 ] ) );
+    /* Disconnect the MQTT connection. */
+    IotMqtt_Disconnect( _mqttConnection, 0 );
+
+    if( TEST_PROTECT() )
+    {
+        /* Waiting on operations after a connection is disconnected should not crash.
+         * The actual statuses of the PUBLISH operations may vary depending on the
+         * timing of publish versus disconnect, so the statuses are not checked. */
+        for( i = 0; i < 3; i++ )
+        {
+            ( void ) IotMqtt_Wait( pPublishOperation[ i ], 100 );
+        }
+    }
 }
 
 /*-----------------------------------------------------------*/

@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,9 +18,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
@@ -120,13 +117,14 @@ static const uint8_t _pPingrespTemplate[] = { 0xd0, 0x00 };
  */
 #define INITIALIZE_OPERATION( name )                                                                             \
     {                                                                                                            \
-        .link = { 0 }, .incomingPublish = false, .pMqttConnection = _pMqttConnection,                            \
+        .link = { 0 }, .incomingPublish = false, .pMqttConnection = NULL,                                        \
         .jobStorage = IOT_TASKPOOL_JOB_STORAGE_INITIALIZER, .job = IOT_TASKPOOL_JOB_INITIALIZER,                 \
         .u.operation =                                                                                           \
         {                                                                                                        \
             .jobReference     = 1, .type        = name,                    .flags      = IOT_MQTT_FLAG_WAITABLE, \
-            .packetIdentifier = 1, .pMqttPacket = NULL,                    .packetSize = 0,                      \
-            .notify           = { .callback = { 0 } },.status      = IOT_MQTT_STATUS_PENDING, .retry      = { 0 }                   \
+            .packetIdentifier = 1, .pMqttPacket = NULL,                    .packetSize =                      0, \
+            .notify           = { .callback = { 0 } },.status      = IOT_MQTT_STATUS_PENDING,                                       \
+            .periodic         = { .retry = { 0 } }                                                               \
         }                                                                                                        \
     }
 
@@ -189,7 +187,7 @@ static bool _disconnectCallbackCalled = false;
 /**
  * @brief Get packet type function override.
  */
-static uint8_t _getPacketType( void * pNetworkConnection,
+static uint8_t _getPacketType( IotNetworkConnection_t pNetworkConnection,
                                const IotNetworkInterface_t * pNetworkInterface )
 {
     _getPacketTypeCalled = true;
@@ -202,12 +200,26 @@ static uint8_t _getPacketType( void * pNetworkConnection,
 /**
  * @brief Get remaining length function override.
  */
-static size_t _getRemainingLength( void * pNetworkConnection,
+static size_t _getRemainingLength( IotNetworkConnection_t pNetworkConnection,
                                    const IotNetworkInterface_t * pNetworkInterface )
 {
     _getRemainingLengthCalled = true;
 
     return _IotMqtt_GetRemainingLength( pNetworkConnection, pNetworkInterface );
+}
+
+/*-----------------------------------------------------------*/
+
+/**
+ * @brief Serializer override for PUBACK.
+ */
+static IotMqttError_t _serializePuback( uint16_t packetIdentifier,
+                                        uint8_t ** pPubackPacket,
+                                        size_t * pPacketSize )
+{
+    return _IotMqtt_SerializePuback( packetIdentifier,
+                                     pPubackPacket,
+                                     pPacketSize );
 }
 
 /*-----------------------------------------------------------*/
@@ -313,7 +325,7 @@ static bool _processBuffer( const _mqttOperation_t * pOperation,
     receiveContext.dataLength = bufferSize;
 
     /* Call the receive callback on pBuffer. */
-    IotMqtt_ReceiveCallback( &receiveContext,
+    IotMqtt_ReceiveCallback( ( IotNetworkConnection_t ) &receiveContext,
                              _pMqttConnection );
 
     /* Check expected result if operation is given. */
@@ -362,7 +374,7 @@ static bool _processPublish( const uint8_t * pPublish,
     receiveContext.dataLength = publishSize;
 
     /* Call the receive callback on pPublish. */
-    IotMqtt_ReceiveCallback( &receiveContext,
+    IotMqtt_ReceiveCallback( ( IotNetworkConnection_t ) &receiveContext,
                              _pMqttConnection );
 
     /* Check how many times the publish callback is invoked. */
@@ -406,7 +418,10 @@ static void _publishCallback( void * pCallbackContext,
 
     /* Check that the parameters to this function are valid. */
     if( ( _IotMqtt_ValidatePublish( AWS_IOT_MQTT_SERVER,
-                                    &( pPublish->u.message.info ) ) == true ) &&
+                                    &( pPublish->u.message.info ),
+                                    0,
+                                    NULL,
+                                    NULL ) == true ) &&
         ( pPublish->u.message.info.topicNameLength == TEST_TOPIC_LENGTH ) &&
         ( strncmp( TEST_TOPIC_NAME, pPublish->u.message.info.pTopicName, TEST_TOPIC_LENGTH ) == 0 ) )
     {
@@ -417,32 +432,14 @@ static void _publishCallback( void * pCallbackContext,
 /*-----------------------------------------------------------*/
 
 /**
- * @brief A PUBACK serializer function that does nothing, but always returns failure.
- *
- * Prevents any tests on QoS 1 PUBLISH packets from sending any PUBACKS.
- */
-static IotMqttError_t _serializePuback( uint16_t packetIdentifier,
-                                        uint8_t ** pPubackPacket,
-                                        size_t * pPacketSize )
-{
-    ( void ) packetIdentifier;
-    ( void ) pPubackPacket;
-    ( void ) pPacketSize;
-
-    return IOT_MQTT_NO_MEMORY;
-}
-
-/*-----------------------------------------------------------*/
-
-/**
  * @brief Simulates a network receive function.
  */
-static size_t _receive( void * pConnection,
+static size_t _receive( IotNetworkConnection_t pConnection,
                         uint8_t * pBuffer,
                         size_t bytesRequested )
 {
     size_t bytesReceived = 0;
-    _receiveContext_t * pReceiveContext = pConnection;
+    _receiveContext_t * pReceiveContext = ( _receiveContext_t * ) pConnection;
 
     if( pReceiveContext->dataIndex != pReceiveContext->dataLength )
     {
@@ -478,9 +475,40 @@ static size_t _receive( void * pConnection,
 /*-----------------------------------------------------------*/
 
 /**
+ * @brief A network send function that checks the message is a PUBACK.
+ */
+static size_t _checkPuback( IotNetworkConnection_t pConnection,
+                            const uint8_t * pMessage,
+                            size_t messageLength )
+{
+    _mqttPacket_t pubackPacket = { .u = { 0 } };
+    IotMqttError_t deserializeStatus = IOT_MQTT_STATUS_PENDING;
+
+    /* Silence warnings about unused parameters. */
+    ( void ) pConnection;
+
+    /* All PUBACK packets should be 4 bytes long. */
+    TEST_ASSERT_EQUAL( 4, messageLength );
+
+    /* Deserialize the PUBACK. */
+    pubackPacket.type = MQTT_PACKET_TYPE_PUBACK;
+    pubackPacket.remainingLength = 2;
+    pubackPacket.pRemainingData = ( uint8_t * ) ( pMessage + 2 );
+    deserializeStatus = _IotMqtt_DeserializePuback( &pubackPacket );
+
+    /* Check the results of the PUBACK deserialization. */
+    TEST_ASSERT_EQUAL( IOT_MQTT_SUCCESS, deserializeStatus );
+    TEST_ASSERT_EQUAL( 1, pubackPacket.packetIdentifier );
+
+    return messageLength;
+}
+
+/*-----------------------------------------------------------*/
+
+/**
  * @brief A network close function that reports if it was invoked.
  */
-static IotNetworkError_t _close( void * pConnection )
+static IotNetworkError_t _close( IotNetworkConnection_t pConnection )
 {
     /* Silence warnings about unused parameters. */
     ( void ) pConnection;
@@ -507,6 +535,45 @@ static void _disconnectCallback( void * pCallbackContext,
     {
         _disconnectCallbackCalled = true;
     }
+}
+
+/*-----------------------------------------------------------*/
+
+/**
+ * @brief Common code for PUBLISH malloc failure tests.
+ */
+static void _publishMallocFail( IotMqttQos_t qos )
+{
+    int32_t i = 0;
+    bool status = false;
+
+    for( i = 0; ; i++ )
+    {
+        DECLARE_PACKET( _pPublishTemplate, pPublish, publishSize );
+
+        if( qos == IOT_MQTT_QOS_1 )
+        {
+            pPublish[ 0 ] = 0x32;
+        }
+
+        UnityMalloc_MakeMallocFailAfterCount( i );
+
+        /* Attempt to process a PUBLISH. Memory allocation will fail at various
+         * times during this call. */
+        status = _processPublish( pPublish, publishSize, 1 );
+
+        /* Exit once the publish is successfully processed. */
+        if( status == true )
+        {
+            break;
+        }
+
+        /* Network close function should not have been invoked. */
+        TEST_ASSERT_EQUAL_INT( false, _networkCloseCalled );
+        TEST_ASSERT_EQUAL_INT( false, _disconnectCallbackCalled );
+    }
+
+    UnityMalloc_MakeMallocFailAfterCount( -1 );
 }
 
 /*-----------------------------------------------------------*/
@@ -543,6 +610,7 @@ TEST_SETUP( MQTT_Unit_Receive )
     serializer.getPacketType = _getPacketType;
     serializer.getRemainingLength = _getRemainingLength;
 
+    _networkInterface.send = _checkPuback;
     _networkInterface.receive = _receive;
     _networkInterface.close = _close;
     networkInfo.pNetworkInterface = &_networkInterface;
@@ -603,10 +671,12 @@ TEST_GROUP_RUNNER( MQTT_Unit_Receive )
 {
     RUN_TEST_CASE( MQTT_Unit_Receive, DecodeRemainingLength );
     RUN_TEST_CASE( MQTT_Unit_Receive, InvalidPacket );
+    RUN_TEST_CASE( MQTT_Unit_Receive, ReceiveMallocFail );
     RUN_TEST_CASE( MQTT_Unit_Receive, ConnackValid );
     RUN_TEST_CASE( MQTT_Unit_Receive, ConnackInvalid );
     RUN_TEST_CASE( MQTT_Unit_Receive, PublishValid );
     RUN_TEST_CASE( MQTT_Unit_Receive, PublishInvalid );
+    RUN_TEST_CASE( MQTT_Unit_Receive, PublishResourceFailure );
     RUN_TEST_CASE( MQTT_Unit_Receive, PubackValid );
     RUN_TEST_CASE( MQTT_Unit_Receive, PubackInvalid );
     RUN_TEST_CASE( MQTT_Unit_Receive, SubackValid );
@@ -633,7 +703,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( 0,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -647,7 +717,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( 129,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -661,7 +731,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( 16386,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -676,7 +746,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( 268435455,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -690,7 +760,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( MQTT_REMAINING_LENGTH_INVALID,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -705,7 +775,7 @@ TEST( MQTT_Unit_Receive, DecodeRemainingLength )
         receiveContext.dataLength = 4;
 
         TEST_ASSERT_EQUAL( MQTT_REMAINING_LENGTH_INVALID,
-                           _IotMqtt_GetRemainingLength( &receiveContext,
+                           _IotMqtt_GetRemainingLength( ( IotNetworkConnection_t ) &receiveContext,
                                                         &_networkInterface ) );
     }
 
@@ -733,7 +803,7 @@ TEST( MQTT_Unit_Receive, InvalidPacket )
     receiveContext.dataLength = 1;
 
     /* Processing a control packet 0xf is a protocol violation. */
-    IotMqtt_ReceiveCallback( &receiveContext,
+    IotMqtt_ReceiveCallback( ( IotNetworkConnection_t ) &receiveContext,
                              _pMqttConnection );
 
     /* Processing an invalid packet should cause the network connection to be closed. */
@@ -751,6 +821,53 @@ TEST( MQTT_Unit_Receive, InvalidPacket )
 /*-----------------------------------------------------------*/
 
 /**
+ * @brief Tests the behavior of @ref mqtt_function_receivecallback when memory
+ * allocation fails.
+ */
+TEST( MQTT_Unit_Receive, ReceiveMallocFail )
+{
+    /* Logging uses malloc and will interfere with this test. Only run if logging
+     * is disabled. */
+    #if ( LIBRARY_LOG_LEVEL == IOT_LOG_NONE )
+        _receiveContext_t receiveContext = { 0 };
+
+        /* Data stream to process. Contains 2 SUBACKs. */
+        const uint8_t pDataStream[] =
+        {
+            0x90, 0x05, 0x00, 0x01, 0x00, 0x01, 0x02,
+            0x90, 0x05, 0x00, 0x01, 0x00, 0x01, 0x02
+        };
+
+        /* Set the members of the receive context. */
+        receiveContext.pData = pDataStream;
+        receiveContext.dataLength = sizeof( pDataStream );
+
+        /* Set malloc to fail and process the first SUBACK. */
+        UnityMalloc_MakeMallocFailAfterCount( 0 );
+        IotMqtt_ReceiveCallback( ( IotNetworkConnection_t ) &receiveContext,
+                                 _pMqttConnection );
+
+        /* Allow the use of malloc and process the second SUBACK. */
+        UnityMalloc_MakeMallocFailAfterCount( -1 );
+        IotMqtt_ReceiveCallback( ( IotNetworkConnection_t ) &receiveContext,
+                                 _pMqttConnection );
+
+        /* Network close function should not have been invoked. */
+        TEST_ASSERT_EQUAL_INT( false, _networkCloseCalled );
+        TEST_ASSERT_EQUAL_INT( false, _disconnectCallbackCalled );
+    #else /* if ( LIBRARY_LOG_LEVEL == IOT_LOG_NONE ) */
+
+        /* Test tear down for this test group checks that deserializer overrides
+         * were called. Set these values to true so that the checks pass. */
+        _deserializeOverrideCalled = true;
+        _getPacketTypeCalled = true;
+        _getRemainingLengthCalled = true;
+    #endif /* if LIBRARY_LOG_LEVEL != IOT_LOG_NONE */
+}
+
+/*-----------------------------------------------------------*/
+
+/**
  * @brief Tests the behavior of @ref mqtt_function_receivecallback with a spec-compliant
  * CONNACK.
  */
@@ -758,6 +875,8 @@ TEST( MQTT_Unit_Receive, ConnackValid )
 {
     uint8_t i = 0;
     _mqttOperation_t connect = INITIALIZE_OPERATION( IOT_MQTT_CONNECT );
+
+    connect.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -829,6 +948,8 @@ TEST( MQTT_Unit_Receive, ConnackInvalid )
 {
     _mqttOperation_t connect = INITIALIZE_OPERATION( IOT_MQTT_CONNECT );
 
+    connect.pMqttConnection = _pMqttConnection;
+
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
     TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( connect.u.operation.notify.waitSemaphore ),
@@ -870,12 +991,12 @@ TEST( MQTT_Unit_Receive, ConnackInvalid )
     /* A CONNACK must have a remaining length of 2. */
     {
         DECLARE_PACKET( _pConnackTemplate, pConnack, connackSize );
-        pConnack[ 1 ] = 0x03;
+        pConnack[ 1 ] = 0x01;
         _operationResetAndPush( &connect );
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( &connect,
                                                      pConnack,
                                                      connackSize,
-                                                     IOT_MQTT_STATUS_PENDING ) );
+                                                     IOT_MQTT_BAD_RESPONSE ) );
 
         /* Network close should have been called for invalid packet. */
         TEST_ASSERT_EQUAL_INT( true, _networkCloseCalled );
@@ -954,8 +1075,7 @@ TEST( MQTT_Unit_Receive, PublishValid )
                                                       1 ) );
     }
 
-    /* Process a valid QoS 1 PUBLISH. Prevent an attempt to send PUBACK by
-     * making no memory available for the PUBACK. */
+    /* Process a valid QoS 1 PUBLISH. */
     {
         DECLARE_PACKET( _pPublishTemplate, pPublish, publishSize );
         pPublish[ 0 ] = 0x32;
@@ -1004,7 +1124,7 @@ TEST( MQTT_Unit_Receive, PublishValid )
 /*-----------------------------------------------------------*/
 
 /**
- * @brief Tests the behavior of @ref mqtt_function_receivecallback with a PUBLIS
+ * @brief Tests the behavior of @ref mqtt_function_receivecallback with a PUBLISH
  * that doesn't comply to MQTT spec.
  */
 TEST( MQTT_Unit_Receive, PublishInvalid )
@@ -1137,12 +1257,57 @@ TEST( MQTT_Unit_Receive, PublishInvalid )
 /*-----------------------------------------------------------*/
 
 /**
+ * @brief Tests the behavior of @ref mqtt_function_receivecallback with errors
+ * such as memory allocation failure and closed connections.
+ */
+TEST( MQTT_Unit_Receive, PublishResourceFailure )
+{
+    /* Test the behavior when memory allocation fails for QoS 0 and 1 PUBLISH. */
+    _publishMallocFail( IOT_MQTT_QOS_0 );
+    _publishMallocFail( IOT_MQTT_QOS_1 );
+
+    /* Test PUBACK generation when malloc fails. */
+    {
+        #if ( IOT_TEST_NO_MALLOC_OVERRIDES != 1 ) && ( IOT_STATIC_MEMORY_ONLY != 1 )
+            IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
+            uint8_t * pPubackPacket = NULL;
+            size_t pubackSize = 0;
+
+            /* Set malloc to fail, then attempt to generate a PUBACK. */
+            UnityMalloc_MakeMallocFailAfterCount( 0 );
+            status = _IotMqtt_SerializePuback( 1, &pPubackPacket, &pubackSize );
+            TEST_ASSERT_EQUAL( IOT_MQTT_NO_MEMORY, status );
+
+            /* Reset malloc failure. */
+            UnityMalloc_MakeMallocFailAfterCount( -1 );
+        #endif /* if ( IOT_TEST_NO_MALLOC_OVERRIDES != 1 ) && ( IOT_STATIC_MEMORY_ONLY != 1 ) */
+    }
+
+    /* Test the behavior when a closed connection is used. */
+    {
+        DECLARE_PACKET( _pPublishTemplate, pPublish, publishSize );
+
+        /* Mark the connection as closed, then attempt to process a PUBLISH with a closed connection. */
+        _pMqttConnection->disconnected = true;
+        TEST_ASSERT_EQUAL_INT( true, _processPublish( pPublish, publishSize, 0 ) );
+
+        /* Network close function should not have been invoked. */
+        TEST_ASSERT_EQUAL_INT( false, _networkCloseCalled );
+        TEST_ASSERT_EQUAL_INT( false, _disconnectCallbackCalled );
+    }
+}
+
+/*-----------------------------------------------------------*/
+
+/**
  * @brief Tests the behavior of @ref mqtt_function_receivecallback with a
  * spec-compliant PUBACK.
  */
 TEST( MQTT_Unit_Receive, PubackValid )
 {
     _mqttOperation_t publish = INITIALIZE_OPERATION( IOT_MQTT_PUBLISH_TO_SERVER );
+
+    publish.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -1186,6 +1351,8 @@ TEST( MQTT_Unit_Receive, PubackValid )
 TEST( MQTT_Unit_Receive, PubackInvalid )
 {
     _mqttOperation_t publish = INITIALIZE_OPERATION( IOT_MQTT_PUBLISH_TO_SERVER );
+
+    publish.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -1231,7 +1398,7 @@ TEST( MQTT_Unit_Receive, PubackInvalid )
     /* A PUBACK must have a remaining length of 2. */
     {
         DECLARE_PACKET( _pPubackTemplate, pPuback, pubackSize );
-        pPuback[ 1 ] = 0x03;
+        pPuback[ 1 ] = 0x01;
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( &publish,
                                                      pPuback,
                                                      pubackSize,
@@ -1281,6 +1448,8 @@ TEST( MQTT_Unit_Receive, SubackValid )
     _mqttSubscription_t * pNewSubscription = NULL;
     _mqttOperation_t subscribe = INITIALIZE_OPERATION( IOT_MQTT_SUBSCRIBE );
     IotMqttSubscription_t pSubscriptions[ 2 ] = { IOT_MQTT_SUBSCRIPTION_INITIALIZER };
+
+    subscribe.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -1390,6 +1559,8 @@ TEST( MQTT_Unit_Receive, SubackValid )
 TEST( MQTT_Unit_Receive, SubackInvalid )
 {
     _mqttOperation_t subscribe = INITIALIZE_OPERATION( IOT_MQTT_SUBSCRIBE );
+
+    subscribe.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -1512,6 +1683,8 @@ TEST( MQTT_Unit_Receive, UnsubackValid )
 {
     _mqttOperation_t unsubscribe = INITIALIZE_OPERATION( IOT_MQTT_UNSUBSCRIBE );
 
+    unsubscribe.pMqttConnection = _pMqttConnection;
+
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
     TEST_ASSERT_EQUAL_INT( true, IotSemaphore_Create( &( unsubscribe.u.operation.notify.waitSemaphore ),
@@ -1554,6 +1727,8 @@ TEST( MQTT_Unit_Receive, UnsubackValid )
 TEST( MQTT_Unit_Receive, UnsubackInvalid )
 {
     _mqttOperation_t unsubscribe = INITIALIZE_OPERATION( IOT_MQTT_UNSUBSCRIBE );
+
+    unsubscribe.pMqttConnection = _pMqttConnection;
 
     /* Create the wait semaphore so notifications don't crash. The value of
      * this semaphore will not be checked, so the maxValue argument is arbitrary. */
@@ -1599,7 +1774,7 @@ TEST( MQTT_Unit_Receive, UnsubackInvalid )
     /* An UNSUBACK must have a remaining length of 2. */
     {
         DECLARE_PACKET( _pUnsubackTemplate, pUnsuback, unsubackSize );
-        pUnsuback[ 1 ] = 0x03;
+        pUnsuback[ 1 ] = 0x01;
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( &unsubscribe,
                                                      pUnsuback,
                                                      unsubackSize,
@@ -1649,7 +1824,7 @@ TEST( MQTT_Unit_Receive, Pingresp )
     /* Even though no PINGREQ is expected, the keep-alive failure flag should
      * be cleared (should not crash). */
     {
-        _pMqttConnection->keepAliveFailure = false;
+        _pMqttConnection->pingreq.u.operation.periodic.ping.failure = 0;
 
         DECLARE_PACKET( _pPingrespTemplate, pPingresp, pingrespSize );
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( NULL,
@@ -1657,14 +1832,14 @@ TEST( MQTT_Unit_Receive, Pingresp )
                                                      pingrespSize,
                                                      IOT_MQTT_SUCCESS ) );
 
-        TEST_ASSERT_EQUAL_INT( false, _pMqttConnection->keepAliveFailure );
+        TEST_ASSERT_EQUAL_INT( 0, _pMqttConnection->pingreq.u.operation.periodic.ping.failure );
         TEST_ASSERT_EQUAL_INT( false, _networkCloseCalled );
         TEST_ASSERT_EQUAL_INT( false, _disconnectCallbackCalled );
     }
 
     /* Process a valid PINGRESP. */
     {
-        _pMqttConnection->keepAliveFailure = true;
+        _pMqttConnection->pingreq.u.operation.periodic.ping.failure = 1;
 
         DECLARE_PACKET( _pPingrespTemplate, pPingresp, pingrespSize );
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( NULL,
@@ -1672,7 +1847,7 @@ TEST( MQTT_Unit_Receive, Pingresp )
                                                      pingrespSize,
                                                      IOT_MQTT_SUCCESS ) );
 
-        TEST_ASSERT_EQUAL_INT( false, _pMqttConnection->keepAliveFailure );
+        TEST_ASSERT_EQUAL_INT( 0, _pMqttConnection->pingreq.u.operation.periodic.ping.failure );
         TEST_ASSERT_EQUAL_INT( false, _networkCloseCalled );
         TEST_ASSERT_EQUAL_INT( false, _disconnectCallbackCalled );
     }
@@ -1680,7 +1855,7 @@ TEST( MQTT_Unit_Receive, Pingresp )
     /* An incomplete PINGRESP should not be processed, and the keep-alive failure
      * flag should not be cleared. */
     {
-        _pMqttConnection->keepAliveFailure = true;
+        _pMqttConnection->pingreq.u.operation.periodic.ping.failure = 1;
 
         DECLARE_PACKET( _pPingrespTemplate, pPingresp, pingrespSize );
         TEST_ASSERT_EQUAL_INT( true, _processBuffer( NULL,
@@ -1688,7 +1863,7 @@ TEST( MQTT_Unit_Receive, Pingresp )
                                                      pingrespSize - 1,
                                                      IOT_MQTT_SUCCESS ) );
 
-        TEST_ASSERT_EQUAL_INT( true, _pMqttConnection->keepAliveFailure );
+        TEST_ASSERT_EQUAL_INT( 1, _pMqttConnection->pingreq.u.operation.periodic.ping.failure );
         TEST_ASSERT_EQUAL_INT( true, _networkCloseCalled );
         TEST_ASSERT_EQUAL_INT( true, _disconnectCallbackCalled );
         _networkCloseCalled = false;
@@ -1697,25 +1872,20 @@ TEST( MQTT_Unit_Receive, Pingresp )
 
     /* A PINGRESP should have a remaining length of 0. */
     {
-        _pMqttConnection->keepAliveFailure = true;
+        IotMqttError_t status = IOT_MQTT_STATUS_PENDING;
+        _mqttPacket_t pingresp;
 
-        DECLARE_PACKET( _pPingrespTemplate, pPingresp, pingrespSize );
-        pPingresp[ 1 ] = 0x01;
-        TEST_ASSERT_EQUAL_INT( true, _processBuffer( NULL,
-                                                     pPingresp,
-                                                     pingrespSize,
-                                                     IOT_MQTT_SUCCESS ) );
+        ( void ) memset( &pingresp, 0x00, sizeof( _mqttPacket_t ) );
+        pingresp.type = MQTT_PACKET_TYPE_PINGRESP;
+        pingresp.remainingLength = 1;
 
-        TEST_ASSERT_EQUAL_INT( true, _pMqttConnection->keepAliveFailure );
-        TEST_ASSERT_EQUAL_INT( true, _networkCloseCalled );
-        TEST_ASSERT_EQUAL_INT( true, _disconnectCallbackCalled );
-        _networkCloseCalled = false;
-        _disconnectCallbackCalled = false;
+        status = _IotMqtt_DeserializePingresp( &pingresp );
+        TEST_ASSERT_EQUAL( IOT_MQTT_BAD_RESPONSE, status );
     }
 
     /* The PINGRESP control packet type must be 0xd0. */
     {
-        _pMqttConnection->keepAliveFailure = true;
+        _pMqttConnection->pingreq.u.operation.periodic.ping.failure = 1;
 
         DECLARE_PACKET( _pPingrespTemplate, pPingresp, pingrespSize );
         pPingresp[ 0 ] = 0xd1;
@@ -1724,7 +1894,7 @@ TEST( MQTT_Unit_Receive, Pingresp )
                                                      pingrespSize,
                                                      IOT_MQTT_SUCCESS ) );
 
-        TEST_ASSERT_EQUAL_INT( true, _pMqttConnection->keepAliveFailure );
+        TEST_ASSERT_EQUAL_INT( 1, _pMqttConnection->pingreq.u.operation.periodic.ping.failure );
         TEST_ASSERT_EQUAL_INT( true, _networkCloseCalled );
         TEST_ASSERT_EQUAL_INT( true, _disconnectCallbackCalled );
         _networkCloseCalled = false;

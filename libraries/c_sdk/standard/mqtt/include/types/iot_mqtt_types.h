@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2019 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,14 +18,11 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
  * @file iot_mqtt_types.h
- * @brief Types of the MQTT library.
+ * @brief MQTT library types.
  */
 
 #ifndef IOT_MQTT_TYPES_H_
@@ -41,7 +38,6 @@
 
 /* Type includes. */
 #include "types/iot_platform_types.h"
-#include "types/iot_taskpool_types.h"
 
 /* Platform network include. */
 #include "platform/iot_network.h"
@@ -49,18 +45,16 @@
 /*---------------------------- MQTT handle types ----------------------------*/
 
 /**
- * @handles_group{mqtt}
- * @handles_brief{MQTT library}
+ * @handles{mqtt,MQTT library}
  */
 
 /**
  * @ingroup mqtt_datatypes_handles
  * @brief Opaque handle of an MQTT connection.
  *
- * This type identifies an MQTT connection, which is valid after a successful call
- * to @ref mqtt_function_connect. A variable of this type is passed as the first
- * argument to [MQTT library functions](@ref mqtt_functions) to identify which
- * connection that function acts on.
+ * MQTT connection handle type.  MQTT connection handles are created by
+ * successful calls to @ref mqtt_function_connect and are used to refer to
+ * the connection when calling MQTT library functions.
  *
  * A call to @ref mqtt_function_disconnect makes a connection handle invalid. Once
  * @ref mqtt_function_disconnect returns, the connection handle should no longer
@@ -74,13 +68,13 @@ typedef struct _mqttConnection   * IotMqttConnection_t;
  * @ingroup mqtt_datatypes_handles
  * @brief Opaque handle that references an in-progress MQTT operation.
  *
- * Set as an output parameter of @ref mqtt_function_publish, @ref mqtt_function_subscribe,
- * and @ref mqtt_function_unsubscribe. These functions queue an MQTT operation; the result
+ * Set as an output parameter of @ref mqtt_function_publishasync, @ref mqtt_function_subscribeasync,
+ * and @ref mqtt_function_unsubscribeasync. These functions queue an MQTT operation; the result
  * of the operation is unknown until a response from the MQTT server is received. Therefore,
  * this handle serves as a reference to MQTT operations awaiting MQTT server response.
  *
- * This reference will be valid from the successful return of @ref mqtt_function_publish,
- * @ref mqtt_function_subscribe, or @ref mqtt_function_unsubscribe. The reference becomes
+ * This reference will be valid from the successful return of @ref mqtt_function_publishasync,
+ * @ref mqtt_function_subscribeasync, or @ref mqtt_function_unsubscribeasync. The reference becomes
  * invalid once the [completion callback](@ref IotMqttCallbackInfo_t) is invoked, or
  * @ref mqtt_function_wait returns.
  *
@@ -95,8 +89,7 @@ typedef struct _mqttOperation    * IotMqttOperation_t;
 /*-------------------------- MQTT enumerated types --------------------------*/
 
 /**
- * @enums_group{mqtt}
- * @enums_brief{MQTT library}
+ * @enums{mqtt,MQTT library}
  */
 
 /**
@@ -113,11 +106,11 @@ typedef enum IotMqttError
      *
      * Functions that may return this value:
      * - @ref mqtt_function_connect
-     * - @ref mqtt_function_publish with QoS 0 parameter
+     * - @ref mqtt_function_publishasync with QoS 0 parameter
      * - @ref mqtt_function_wait
-     * - @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishsync
      *
      * Will also be the value of an operation completion callback's
      * #IotMqttCallbackParam_t.result when successful.
@@ -128,11 +121,11 @@ typedef enum IotMqttError
      * @brief MQTT operation queued, awaiting result.
      *
      * Functions that may return this value:
-     * - @ref mqtt_function_subscribe
-     * - @ref mqtt_function_unsubscribe
-     * - @ref mqtt_function_publish with QoS 1 parameter
+     * - @ref mqtt_function_subscribeasync
+     * - @ref mqtt_function_unsubscribeasync
+     * - @ref mqtt_function_publishasync with QoS 1 parameter
      */
-    IOT_MQTT_STATUS_PENDING,
+    IOT_MQTT_STATUS_PENDING = 1,
 
     /**
      * @brief Initialization failed.
@@ -140,30 +133,30 @@ typedef enum IotMqttError
      * Functions that may return this value:
      * - @ref mqtt_function_init
      */
-    IOT_MQTT_INIT_FAILED,
+    IOT_MQTT_INIT_FAILED = 2,
 
     /**
      * @brief At least one parameter is invalid.
      *
      * Functions that may return this value:
      * - @ref mqtt_function_connect
-     * - @ref mqtt_function_subscribe and @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_unsubscribe and @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_publish and @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribeasync and @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribeasync and @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishasync and @ref mqtt_function_publishsync
      * - @ref mqtt_function_wait
      */
-    IOT_MQTT_BAD_PARAMETER,
+    IOT_MQTT_BAD_PARAMETER = 3,
 
     /**
      * @brief MQTT operation failed because of memory allocation failure.
      *
      * Functions that may return this value:
      * - @ref mqtt_function_connect
-     * - @ref mqtt_function_subscribe and @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_unsubscribe and @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_publish and @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribeasync and @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribeasync and @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishasync and @ref mqtt_function_publishsync
      */
-    IOT_MQTT_NO_MEMORY,
+    IOT_MQTT_NO_MEMORY = 4,
 
     /**
      * @brief MQTT operation failed because the network was unusable.
@@ -173,25 +166,25 @@ typedef enum IotMqttError
      * Functions that may return this value:
      * - @ref mqtt_function_connect
      * - @ref mqtt_function_wait
-     * - @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishsync
      *
      * May also be the value of an operation completion callback's
      * #IotMqttCallbackParam_t.result.
      */
-    IOT_MQTT_NETWORK_ERROR,
+    IOT_MQTT_NETWORK_ERROR = 5,
 
     /**
      * @brief MQTT operation could not be scheduled, i.e. enqueued for sending.
      *
      * Functions that may return this value:
      * - @ref mqtt_function_connect
-     * - @ref mqtt_function_subscribe and @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_unsubscribe and @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_publish and @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribeasync and @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribeasync and @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishasync and @ref mqtt_function_publishsync
      */
-    IOT_MQTT_SCHEDULING_ERROR,
+    IOT_MQTT_SCHEDULING_ERROR = 6,
 
     /**
      * @brief MQTT response packet received from the network is malformed.
@@ -199,16 +192,16 @@ typedef enum IotMqttError
      * Functions that may return this value:
      * - @ref mqtt_function_connect
      * - @ref mqtt_function_wait
-     * - @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishsync
      *
      * May also be the value of an operation completion callback's
      * #IotMqttCallbackParam_t.result.
      *
      * @note If this value is received, the network connection has been closed.
      */
-    IOT_MQTT_BAD_RESPONSE,
+    IOT_MQTT_BAD_RESPONSE = 7,
 
     /**
      * @brief A blocking MQTT operation timed out.
@@ -216,11 +209,11 @@ typedef enum IotMqttError
      * Functions that may return this value:
      * - @ref mqtt_function_connect
      * - @ref mqtt_function_wait
-     * - @ref mqtt_function_timedsubscribe
-     * - @ref mqtt_function_timedunsubscribe
-     * - @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishsync
      */
-    IOT_MQTT_TIMEOUT,
+    IOT_MQTT_TIMEOUT = 8,
 
     /**
      * @brief A CONNECT or at least one subscription was refused by the server.
@@ -229,19 +222,19 @@ typedef enum IotMqttError
      * - @ref mqtt_function_connect
      * - @ref mqtt_function_wait, but only when its #IotMqttOperation_t parameter
      * is associated with a SUBSCRIBE operation.
-     * - @ref mqtt_function_timedsubscribe
+     * - @ref mqtt_function_subscribesync
      *
      * May also be the value of an operation completion callback's
      * #IotMqttCallbackParam_t.result for a SUBSCRIBE.
      *
      * @note If this value is returned and multiple subscriptions were passed to
-     * @ref mqtt_function_subscribe (or @ref mqtt_function_timedsubscribe), it's
+     * @ref mqtt_function_subscribeasync (or @ref mqtt_function_subscribesync), it's
      * still possible that some of the subscriptions succeeded. This value only
      * signifies that AT LEAST ONE subscription was rejected. The function @ref
      * mqtt_function_issubscribed can be used to determine which subscriptions
      * were accepted or rejected.
      */
-    IOT_MQTT_SERVER_REFUSED,
+    IOT_MQTT_SERVER_REFUSED = 9,
 
     /**
      * @brief A QoS 1 PUBLISH received no response and [the retry limit]
@@ -250,12 +243,27 @@ typedef enum IotMqttError
      * Functions that may return this value:
      * - @ref mqtt_function_wait, but only when its #IotMqttOperation_t parameter
      * is associated with a QoS 1 PUBLISH operation
-     * - @ref mqtt_function_timedpublish
+     * - @ref mqtt_function_publishsync
      *
      * May also be the value of an operation completion callback's
      * #IotMqttCallbackParam_t.result for a QoS 1 PUBLISH.
      */
-    IOT_MQTT_RETRY_NO_RESPONSE
+    IOT_MQTT_RETRY_NO_RESPONSE = 10,
+
+    /**
+     * @brief An API function was called before @ref mqtt_function_init.
+     *
+     * Functions that may return this value:
+     * - @ref mqtt_function_connect
+     * - @ref mqtt_function_subscribeasync
+     * - @ref mqtt_function_subscribesync
+     * - @ref mqtt_function_unsubscribeasync
+     * - @ref mqtt_function_unsubscribesync
+     * - @ref mqtt_function_publishasync
+     * - @ref mqtt_function_publishsync
+     * - @ref mqtt_function_wait
+     */
+    IOT_MQTT_NOT_INITIALIZED = 11
 } IotMqttError_t;
 
 /**
@@ -318,17 +326,16 @@ typedef enum IotMqttDisconnectReason
 /*------------------------- MQTT parameter structs --------------------------*/
 
 /**
- * @paramstructs_group{mqtt}
- * @paramstructs_brief{mqtt,MQTT}
+ * @paramstructs{mqtt,MQTT}
  */
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
  * @brief Information on a PUBLISH message.
  *
- * @paramfor @ref mqtt_function_connect, @ref mqtt_function_publish
+ * @paramfor @ref mqtt_function_connect, @ref mqtt_function_publishasync
  *
- * Passed to @ref mqtt_function_publish as the message to publish and @ref
+ * Passed to @ref mqtt_function_publishasync as the message to publish and @ref
  * mqtt_function_connect as the Last Will and Testament (LWT) message.
  *
  * @initializer{IotMqttPublishInfo_t,IOT_MQTT_PUBLISH_INFO_INITIALIZER}
@@ -354,18 +361,9 @@ typedef enum IotMqttDisconnectReason
  * @note The lengths of the strings in this struct should not include the NULL
  * terminator. Strings in this struct do not need to be NULL-terminated.
  *
- * @note The AWS IoT MQTT server does not support the DUP bit. When
- * [using this library with the AWS IoT MQTT server](@ref IotMqttConnectInfo_t.awsIotMqttMode),
- * retransmissions will instead be sent with a new packet identifier in the PUBLISH
- * packet. This is a nonstandard workaround. Note that this workaround has some
- * flaws, including the following:
- * - The previous packet identifier is forgotten, so if a PUBACK arrives for that
- * packet identifier, it will be ignored. On an exceptionally busy network, this
- * may cause excessive retransmissions when too many PUBACKS arrive after the
- * PUBLISH packet identifier is changed. However, the exponential backoff
- * retransmission strategy should mitigate this problem.
- * - Log messages will be printed using the new packet identifier; the old packet
- * identifier is not saved.
+ * @note The AWS IoT MQTT broker does not support the DUP bit.  More
+ * information about connecting to AWS IoT via MQTT is available
+ * [here](https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html).
  *
  * <b>Example</b>
  *
@@ -407,7 +405,7 @@ typedef struct IotMqttPublishInfo
  *
  * @paramfor MQTT callback functions
  *
- * The MQTT library passes this struct to registered callback whenever an
+ * The MQTT library passes this struct to a registered callback whenever an
  * operation completes, a message is received on a topic filter, or an MQTT
  * connection is disconnected.
  *
@@ -446,6 +444,9 @@ typedef struct IotMqttCallbackParam
      */
     IotMqttConnection_t mqttConnection;
 
+    /* MISRA rule 19.2 doesn't allow usage of union
+     * but it is intentionally used here to reduce the size of struct. */
+    /* coverity[misra_c_2012_rule_19_2_violation] */
     union
     {
         /* Valid for completed operations. */
@@ -471,18 +472,18 @@ typedef struct IotMqttCallbackParam
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
- * @brief Information on a user-provided MQTT callback function.
+ * @brief MQTT callback function and context.
  *
- * @paramfor @ref mqtt_function_subscribe, @ref mqtt_function_unsubscribe,
- * and @ref mqtt_function_publish. Cannot be used with #IOT_MQTT_FLAG_WAITABLE.
+ * @paramfor @ref mqtt_function_subscribeasync, @ref mqtt_function_unsubscribeasync,
+ * and @ref mqtt_function_publishasync. Cannot be used with #IOT_MQTT_FLAG_WAITABLE.
  *
- * Provides a function to be invoked when an operation completes or when a
- * server-to-client PUBLISH is received.
+ * Specifies a function to be invoked with optional context when an operation
+ * completes or when a server-to-client PUBLISH is received.
  *
  * @initializer{IotMqttCallbackInfo_t,IOT_MQTT_CALLBACK_INFO_INITIALIZER}
  *
  * Below is an example for receiving an asynchronous notification on operation
- * completion. See @ref mqtt_function_subscribe for an example of using this struct
+ * completion. See @ref mqtt_function_subscribeasync for an example of using this struct
  * with for incoming PUBLISH messages.
  *
  * @code{c}
@@ -494,11 +495,11 @@ typedef struct IotMqttCallbackParam
  * callbackInfo.function = operationComplete;
  *
  * // Operation to wait for.
- * IotMqttError_t result = IotMqtt_Publish( &mqttConnection,
- *                                          &publishInfo,
- *                                          0,
- *                                          &callbackInfo,
- *                                          &reference );
+ * IotMqttError_t result = IotMqtt_PublishAsync( &mqttConnection,
+ *                                               &publishInfo,
+ *                                               0,
+ *                                               &callbackInfo,
+ *                                               &reference );
  *
  * // Publish should have returned IOT_MQTT_STATUS_PENDING. Once a response
  * // is received, operationComplete is executed with the actual status passed
@@ -512,25 +513,26 @@ typedef struct IotMqttCallbackInfo
     /**
      * @brief User-provided callback function signature.
      *
-     * @param[in] void * #IotMqttCallbackInfo_t.pCallbackContext
-     * @param[in] IotMqttCallbackParam_t * Details on the outcome of the MQTT operation
+     * @param[in] pCallbackContext #IotMqttCallbackInfo_t.pCallbackContext.
+     * @param[in] pCallbackParam Details on the outcome of the MQTT operation
      * or an incoming MQTT PUBLISH.
      *
      * @see #IotMqttCallbackParam_t for more information on the second parameter.
      */
-    void ( * function )( void *,
-                         IotMqttCallbackParam_t * );
+    void ( * function )( void * pCallbackContext,
+                         IotMqttCallbackParam_t * pCallbackParam );
 } IotMqttCallbackInfo_t;
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
- * @brief Information on an MQTT subscription.
+ * @brief MQTT subscription.
  *
- * @paramfor @ref mqtt_function_subscribe, @ref mqtt_function_unsubscribe
+ * @paramfor @ref mqtt_function_subscribeasync, @ref mqtt_function_unsubscribeasync,
+ * @ref mqtt_function_subscribesync, @ref mqtt_function_unsubscribesync
  *
- * An array of these is passed to @ref mqtt_function_subscribe and @ref
- * mqtt_function_unsubscribe. However, #IotMqttSubscription_t.callback and
- * and #IotMqttSubscription_t.qos are ignored by @ref mqtt_function_unsubscribe.
+ * An array of these is passed to @ref mqtt_function_subscribeasync and @ref
+ * mqtt_function_unsubscribeasync. However, #IotMqttSubscription_t.callback and
+ * and #IotMqttSubscription_t.qos are ignored by @ref mqtt_function_unsubscribeasync.
  *
  * @initializer{IotMqttSubscription_t,IOT_MQTT_SUBSCRIPTION_INITIALIZER}
  *
@@ -543,7 +545,7 @@ typedef struct IotMqttSubscription
     /**
      * @brief QoS of messages delivered on subscription.
      *
-     * Must be `0` or `1`. Ignored by @ref mqtt_function_unsubscribe.
+     * Must be `0` or `1`. Ignored by @ref mqtt_function_unsubscribeasync.
      */
     IotMqttQos_t qos;
 
@@ -553,14 +555,14 @@ typedef struct IotMqttSubscription
     /**
      * @brief Callback to invoke when a message is received.
      *
-     * See #IotMqttCallbackInfo_t. Ignored by @ref mqtt_function_unsubscribe.
+     * See #IotMqttCallbackInfo_t. Ignored by @ref mqtt_function_unsubscribeasync.
      */
     IotMqttCallbackInfo_t callback;
 } IotMqttSubscription_t;
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
- * @brief Information on a new MQTT connection.
+ * @brief MQTT connection details.
  *
  * @paramfor @ref mqtt_function_connect
  *
@@ -578,11 +580,10 @@ typedef struct IotMqttConnectInfo
     /**
      * @brief Specifies if this MQTT connection is to an AWS IoT MQTT server.
      *
-     * The AWS IoT MQTT broker [differs somewhat from the MQTT specification.]
+     * Set this member to `true` when connecting to the AWS IoT MQTT broker or
+     * `false` otherwise.  Additional details about connecting to AWS IoT
+     * via MQTT are available [here]
      * (https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html)
-     * When this member is `true`, the MQTT library will accommodate these
-     * differences. This setting should be `false` when communicating with a
-     * fully-compliant MQTT broker.
      *
      * @attention This setting <b>MUST</b> be `true` when using the AWS IoT MQTT
      * server; it <b>MUST</b> be `false` otherwise.
@@ -628,9 +629,13 @@ typedef struct IotMqttConnectInfo
      * Pointer to the start of an array of subscriptions present a previous session,
      * if any. These subscriptions will be immediately restored upon reconnecting.
      *
-     * This member is ignored if it is `NULL` or #IotMqttConnectInfo_t.cleanSession
-     * is `true`. If this member is not `NULL`, #IotMqttConnectInfo_t.previousSubscriptionCount
-     * must be nonzero.
+     * [Optional] The field can also be used to pass a list of subscriptions to be
+     * stored locally without a SUBSCRIBE packet being sent to the broker. These subscriptions
+     * are useful to invoke application level callbacks for messages received on unsolicited
+     * topics from the broker.
+     *
+     * This member is ignored if it is `NULL`. If this member is not `NULL`,
+     * #IotMqttConnectInfo_t.previousSubscriptionCount must be nonzero.
      */
     const IotMqttSubscription_t * pPreviousSubscriptions;
 
@@ -641,9 +646,8 @@ typedef struct IotMqttConnectInfo
      * #IotMqttConnectInfo_t.pPreviousSubscriptions.
      *
      * This value is ignored if #IotMqttConnectInfo_t.pPreviousSubscriptions
-     * is `NULL` or #IotMqttConnectInfo_t.cleanSession is `true`. If
-     * #IotMqttConnectInfo_t.pPreviousSubscriptions is not `NULL`, this value
-     * must be nonzero.
+     * is `NULL`. If #IotMqttConnectInfo_t.pPreviousSubscriptions is not `NULL`,
+     * this value must be nonzero.
      */
     size_t previousSubscriptionCount;
 
@@ -667,15 +671,41 @@ typedef struct IotMqttConnectInfo
     const char * pClientIdentifier;  /**< @brief MQTT client identifier. */
     uint16_t clientIdentifierLength; /**< @brief Length of #IotMqttConnectInfo_t.pClientIdentifier. */
 
-    /* These credentials are not used by AWS IoT and may be ignored if
-     * awsIotMqttMode is true. */
-    const char * pUserName;  /**< @brief Username for MQTT connection. */
+    /**
+     * @brief Username for MQTT connection.
+     *
+     * The MQTT username and password can be used for AWS IoT Enhanced Custom
+     * Authentication as described [here]
+     * (https://docs.aws.amazon.com/iot/latest/developerguide/enhanced-custom-authentication.html).
+     */
+    const char * pUserName;
     uint16_t userNameLength; /**< @brief Length of #IotMqttConnectInfo_t.pUserName. */
     const char * pPassword;  /**< @brief Password for MQTT connection. */
     uint16_t passwordLength; /**< @brief Length of #IotMqttConnectInfo_t.pPassword. */
 } IotMqttConnectInfo_t;
 
-#if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1
+/**
+ * @ingroup mqtt_datatypes_paramstructs
+ * @brief MQTT packet details.
+ *
+ * @paramfor @ref mqtt_function_deserializeresponse @ref mqtt_function_deserializepublish
+ *
+ * Passed as an argument to public low level mqtt deserialize functions.
+ *
+ * @initializer{IotMqttPacketInfo_t,IOT_MQTT_PACKET_INFO_INITIALIZER}
+ *
+ * @note This structure should be only used while accessing low level MQTT deserialization API.
+ * The low level serialization/ deserialization API should be only used for implementing
+ * light weight single threaded mqtt client.
+ */
+typedef struct IotMqttPacketInfo
+{
+    uint8_t * pRemainingData;     /**< @brief (Input) The remaining data in MQTT packet. */
+    size_t remainingLength;       /**< @brief (Input) Length of the remaining data in the MQTT packet. */
+    uint16_t packetIdentifier;    /**< @brief (Output) MQTT packet identifier. */
+    uint8_t type;                 /**< @brief (Input) A value identifying the packet type. */
+    IotMqttPublishInfo_t pubInfo; /**< @brief (Output) Publish info in case of deserializing PUBLISH. */
+} IotMqttPacketInfo_t;
 
 /**
  * @cond DOXYGEN_IGNORE
@@ -683,8 +713,127 @@ typedef struct IotMqttConnectInfo
  *
  * Forward declaration of the internal MQTT packet structure.
  */
-    struct _mqttPacket;
+struct _mqttPacket;
 /** @endcond */
+
+/**
+ * @brief Get the MQTT packet type from a stream of bytes off the network.
+ *
+ * @param[in] pNetworkConnection Reference to the network connection.
+ * @param[in] pNetworkInterface Function pointers used to interact with the
+ * network.
+ */
+typedef uint8_t ( * IotMqttGetPacketType_t )( IotNetworkConnection_t pNetworkConnection,
+                                              const IotNetworkInterface_t * pNetworkInterface );
+
+/**
+ * @brief Get the remaining length from a stream of bytes off the network.
+ *
+ * @param[in] pNetworkConnection Reference to the network connection.
+ * @param[in] pNetworkInterface Function pointers used to interact with the
+ * network.
+ */
+typedef size_t ( * IotMqttGetRemainingLength_t )( IotNetworkConnection_t pNetworkConnection,
+                                                  const IotNetworkInterface_t * pNetworkInterface );
+
+/**
+ * @brief Free a packet generated by the serializer.
+ *
+ * This function pointer must be set if any other serializer override is set.
+ * @param[in] uint8_t* The packet to free.
+ */
+typedef void ( * IotMqttFreePacket_t )( uint8_t * pPacket );
+
+/**
+ * @brief CONNECT packet serializer function.
+ * @param[in] IotMqttConnectInfo_t* User-provided CONNECT information.
+ * @param[out] uint8_t** Where the CONNECT packet is written.
+ * @param[out] size_t* Size of the CONNECT packet.
+ */
+typedef IotMqttError_t ( * IotMqttSerializeConnect_t )( const IotMqttConnectInfo_t * pConnectInfo,
+                                                        uint8_t ** pConnectPacket,
+                                                        size_t * pPacketSize );
+
+/**
+ * @brief PINGREQ packet serializer function.
+ * @param[out] uint8_t** Where the PINGREQ packet is written.
+ * @param[out] size_t* Size of the PINGREQ packet.
+ */
+typedef IotMqttError_t ( * IotMqttSerializePingreq_t )( uint8_t ** pPingreqPacket,
+                                                        size_t * pPacketSize );
+
+/**
+ * @brief PUBLISH packet serializer function.
+ * @param[in] IotMqttPublishInfo_t* User-provided PUBLISH information.
+ * @param[out] uint8_t** Where the PUBLISH packet is written.
+ * @param[out] size_t* Size of the PUBLISH packet.
+ * @param[out] uint16_t* The packet identifier generated for this PUBLISH.
+ * @param[out] uint8_t** Where the high byte of the packet identifier
+ * is written.
+ */
+typedef IotMqttError_t ( * IotMqtt_SerializePublish_t )( const IotMqttPublishInfo_t * pPublishInfo,
+                                                         uint8_t ** pPublishPacket,
+                                                         size_t * pPacketSize,
+                                                         uint16_t * pPacketIdentifier,
+                                                         uint8_t ** pPacketIdentifierHigh );
+
+/**
+ * @brief SUBSCRIBE/UNSUBSCRIBE packet serializer function.
+ * @param[in] IotMqttSubscription_t* User-provided array of subscriptions.
+ * @param[in] size_t Number of elements in the subscription array.
+ * @param[out] uint8_t** Where the SUBSCRIBE packet is written.
+ * @param[out] size_t* Size of the SUBSCRIBE packet.
+ * @param[out] uint16_t* The packet identifier generated for this SUBSCRIBE.
+ */
+typedef IotMqttError_t ( * IotMqttSerializeSubscribe_t )( const IotMqttSubscription_t * pSubscriptionList,
+                                                          size_t subscriptionCount,
+                                                          uint8_t ** pSubscribePacket,
+                                                          size_t * pPacketSize,
+                                                          uint16_t * pPacketIdentifier );
+
+/**
+ * @brief DISCONNECT packet serializer function.
+ * @param[out] uint8_t** Where the DISCONNECT packet is written.
+ * @param[out] size_t* Size of the DISCONNECT packet.
+ */
+typedef IotMqttError_t ( * IotMqttSerializeDisconnect_t )( uint8_t ** pDisconnectPacket,
+                                                           size_t * pPacketSize );
+
+/**
+ * @brief MQTT packet deserializer function.
+ * @param[in,out] _mqttPacket* Pointer to an MQTT packet structure
+ */
+typedef IotMqttError_t ( * IotMqttDeserialize_t )( struct _mqttPacket * pMqttPacket );
+
+/**
+ * @brief PUBACK packet serializer function.
+ * @param[in] uint16_t The packet identifier to place in PUBACK.
+ * @param[out] uint8_t** Where the PUBACK packet is written.
+ * @param[out] size_t* Size of the PUBACK packet.
+ */
+typedef IotMqttError_t ( * IotMqttSerializePuback_t )( uint16_t packetIdentifier,
+                                                       uint8_t ** pPubackPacket,
+                                                       size_t * pPacketSize );
+
+/**
+ * @brief Set the `DUP` bit in a QoS `1` PUBLISH packet.
+ * @param[in] uint8_t* Pointer to the PUBLISH packet to modify.
+ * @param[in] uint8_t* The high byte of any packet identifier to modify.
+ * @param[out] uint16_t* New packet identifier (AWS IoT MQTT mode only).
+ */
+typedef void ( * IotMqttPublishSetDup_t )( uint8_t * pPublishPacket,
+                                           uint8_t * pPacketIdentifierHigh,
+                                           uint16_t * pNewPacketIdentifier );
+
+/**
+ * @brief Function pointer to read the next available byte on a network connection.
+ * @param[in] pNetworkContext reference to network connection like socket.
+ * @param[out] pNextByte Pointer to the byte read from the network.
+ */
+typedef IotMqttError_t (* IotMqttGetNextByte_t)( IotNetworkConnection_t pNetworkContext,
+                                                 uint8_t * pNextByte );
+
+#if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
@@ -707,197 +856,128 @@ typedef struct IotMqttConnectInfo
     {
         /**
          * @brief Get the MQTT packet type from a stream of bytes off the network.
-         *
-         * @param[in] pNetworkConnection Reference to the network connection.
-         * @param[in] pNetworkInterface Function pointers used to interact with the
-         * network.
-         *
          * <b>Default implementation:</b> #_IotMqtt_GetPacketType
          */
-        uint8_t ( * getPacketType )( void * /* pNetworkConnection */,
-                                     const IotNetworkInterface_t * /* pNetworkInterface */ );
+        IotMqttGetPacketType_t getPacketType;
 
         /**
          * @brief Get the remaining length from a stream of bytes off the network.
-         *
-         * @param[in] pNetworkConnection Reference to the network connection.
-         * @param[in] pNetworkInterface Function pointers used to interact with the
-         * network.
-         *
          * <b>Default implementation:</b> #_IotMqtt_GetRemainingLength
          */
-        size_t ( * getRemainingLength )( void * pNetworkConnection,
-                                         const IotNetworkInterface_t * pNetworkInterface );
+        IotMqttGetRemainingLength_t getRemainingLength;
 
         /**
          * @brief Free a packet generated by the serializer.
          *
-         * This function pointer must be set if any other serializer override is set.
-         * @param[in] uint8_t* The packet to free.
-         *
          * <b>Default implementation:</b> #_IotMqtt_FreePacket
          */
-        void ( * freePacket )( uint8_t * /* pPacket */ );
+        IotMqttFreePacket_t freePacket;
 
         struct
         {
             /**
              * @brief CONNECT packet serializer function.
-             * @param[in] IotMqttConnectInfo_t* User-provided CONNECT information.
-             * @param[out] uint8_t** Where the CONNECT packet is written.
-             * @param[out] size_t* Size of the CONNECT packet.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializeConnect
              */
-            IotMqttError_t ( * connect )( const IotMqttConnectInfo_t * /* pConnectInfo */,
-                                          uint8_t ** /* pConnectPacket */,
-                                          size_t * /* pPacketSize */ );
+            IotMqttSerializeConnect_t connect;
 
             /**
              * @brief PUBLISH packet serializer function.
-             * @param[in] IotMqttPublishInfo_t* User-provided PUBLISH information.
-             * @param[out] uint8_t** Where the PUBLISH packet is written.
-             * @param[out] size_t* Size of the PUBLISH packet.
-             * @param[out] uint16_t* The packet identifier generated for this PUBLISH.
-             * @param[out] uint8_t** Where the high byte of the packet identifier
-             * is written.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializePublish
              */
-            IotMqttError_t ( * publish )( const IotMqttPublishInfo_t * /* pPublishInfo */,
-                                          uint8_t ** /* pPublishPacket */,
-                                          size_t * /* pPacketSize */,
-                                          uint16_t * /* pPacketIdentifier */,
-                                          uint8_t ** /* pPacketIdentifierHigh */ );
+            IotMqtt_SerializePublish_t publish;
 
             /**
              * @brief Set the `DUP` bit in a QoS `1` PUBLISH packet.
-             * @param[in] uint8_t* Pointer to the PUBLISH packet to modify.
-             * @param[in] uint8_t* The high byte of any packet identifier to modify.
-             * @param[out] uint16_t* New packet identifier (AWS IoT MQTT mode only).
              *
              * <b>Default implementation:</b> #_IotMqtt_PublishSetDup
              */
-            void ( * publishSetDup )( uint8_t * /* pPublishPacket */,
-                                      uint8_t * /* pPacketIdentifierHigh */,
-                                      uint16_t * /* pNewPacketIdentifier */ );
+            IotMqttPublishSetDup_t publishSetDup;
 
             /**
              * @brief PUBACK packet serializer function.
-             * @param[in] uint16_t The packet identifier to place in PUBACK.
-             * @param[out] uint8_t** Where the PUBACK packet is written.
-             * @param[out] size_t* Size of the PUBACK packet.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializePuback
              */
-            IotMqttError_t ( * puback )( uint16_t /* packetIdentifier */,
-                                         uint8_t ** /* pPubackPacket */,
-                                         size_t * /* pPacketSize */ );
+            IotMqttSerializePuback_t puback;
 
             /**
              * @brief SUBSCRIBE packet serializer function.
-             * @param[in] IotMqttSubscription_t* User-provided array of subscriptions.
-             * @param[in] size_t Number of elements in the subscription array.
-             * @param[out] uint8_t** Where the SUBSCRIBE packet is written.
-             * @param[out] size_t* Size of the SUBSCRIBE packet.
-             * @param[out] uint16_t* The packet identifier generated for this SUBSCRIBE.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializeSubscribe
              */
-            IotMqttError_t ( * subscribe )( const IotMqttSubscription_t * /* pSubscriptionList */,
-                                            size_t /* subscriptionCount */,
-                                            uint8_t ** /* pSubscribePacket */,
-                                            size_t * /* pPacketSize */,
-                                            uint16_t * /* pPacketIdentifier */ );
+            IotMqttSerializeSubscribe_t subscribe;
 
             /**
              * @brief UNSUBSCRIBE packet serializer function.
-             * @param[in] IotMqttSubscription_t* User-provided array of subscriptions to remove.
-             * @param[in] size_t Number of elements in the subscription array.
-             * @param[out] uint8_t** Where the UNSUBSCRIBE packet is written.
-             * @param[out] size_t* Size of the UNSUBSCRIBE packet.
-             * @param[out] uint16_t* The packet identifier generated for this UNSUBSCRIBE.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializeUnsubscribe
              */
-            IotMqttError_t ( * unsubscribe )( const IotMqttSubscription_t * /* pSubscriptionList */,
-                                              size_t /* subscriptionCount */,
-                                              uint8_t ** /* pUnsubscribePacket */,
-                                              size_t * /* pPacketSize */,
-                                              uint16_t * /* pPacketIdentifier */ );
+            IotMqttSerializeSubscribe_t unsubscribe;
 
             /**
              * @brief PINGREQ packet serializer function.
-             * @param[out] uint8_t** Where the PINGREQ packet is written.
-             * @param[out] size_t* Size of the PINGREQ packet.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializePingreq
              */
-            IotMqttError_t ( * pingreq )( uint8_t ** /* pPingreqPacket */,
-                                          size_t * /* pPacketSize */ );
+            IotMqttSerializePingreq_t pingreq;
 
             /**
              * @brief DISCONNECT packet serializer function.
-             * @param[out] uint8_t** Where the DISCONNECT packet is written.
-             * @param[out] size_t* Size of the DISCONNECT packet.
              *
              * <b>Default implementation:</b> #_IotMqtt_SerializeDisconnect
              */
-            IotMqttError_t ( * disconnect )( uint8_t ** /* pDisconnectPacket */,
-                                             size_t * /* pPacketSize */ );
+            IotMqttSerializeDisconnect_t disconnect;
         } serialize; /**< @brief Overrides the packet serialization functions for a single connection. */
 
         struct
         {
             /**
              * @brief CONNACK packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing a CONNACK.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializeConnack
              */
-            IotMqttError_t ( * connack )( struct _mqttPacket * /* pConnack */ );
+            IotMqttDeserialize_t connack;
 
             /**
              * @brief PUBLISH packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing a PUBLISH.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializePublish
              */
-            IotMqttError_t ( * publish )( struct _mqttPacket * /* pPublish */ );
+            IotMqttDeserialize_t publish;
 
             /**
              * @brief PUBACK packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing a PUBACK.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializePuback
              */
-            IotMqttError_t ( * puback )( struct _mqttPacket * pPuback );
+            IotMqttDeserialize_t puback;
 
             /**
              * @brief SUBACK packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing a SUBACK.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializeSuback
              */
-            IotMqttError_t ( * suback )( struct _mqttPacket * /* pSuback */ );
+            IotMqttDeserialize_t suback;
 
             /**
              * @brief UNSUBACK packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing an UNSUBACK.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializeUnsuback
              */
-            IotMqttError_t ( * unsuback )( struct _mqttPacket * /* pUnsuback */ );
+            IotMqttDeserialize_t unsuback;
 
             /**
              * @brief PINGRESP packet deserializer function.
-             * @param[in,out] _mqttPacket* Pointer to an MQTT packet struct representing a PINGRESP.
              *
              * <b>Default implementation:</b> #_IotMqtt_DeserializePingresp
              */
-            IotMqttError_t ( * pingresp )( struct _mqttPacket * /* pPingresp */ );
+            IotMqttDeserialize_t pingresp;
         } deserialize; /**< @brief Overrides the packet deserialization functions for a single connection. */
     } IotMqttSerializer_t;
+
 #else /* if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1 */
 
 /* When MQTT packet serializer overrides are disabled, this struct is an
@@ -908,8 +988,7 @@ typedef struct IotMqttConnectInfo
 
 /**
  * @ingroup mqtt_datatypes_paramstructs
- * @brief Infomation on the transport-layer network connection for the new MQTT
- * connection.
+ * @brief MQTT network connection details.
  *
  * @paramfor @ref mqtt_function_connect
  *
@@ -937,19 +1016,22 @@ typedef struct IotMqttNetworkInfo
      */
     bool createNetworkConnection;
 
+    /* MISRA rule 19.2 doesn't allow usage of union
+     * but it is intentionally used here to reduce the size of struct. */
+    /* coverity[misra_c_2012_rule_19_2_violation] */
     union
     {
         struct
         {
             /**
-             * @brief Information on the MQTT server, passed as `pConnectionInfo` to
+             * @brief Information on the MQTT server, passed as `pServerInfo` to
              * #IotNetworkInterface_t::create.
              *
              * This member is opaque to the MQTT library. It is passed to the network
              * interface when creating a new network connection. It is only valid when
              * #IotMqttNetworkInfo_t::createNetworkConnection is `true`.
              */
-            void * pNetworkServerInfo;
+            IotNetworkServerInfo_t pNetworkServerInfo;
 
             /**
              * @brief Credentials for the MQTT server, passed as `pCredentialInfo` to
@@ -959,7 +1041,7 @@ typedef struct IotMqttNetworkInfo
              * interface when creating a new network connection. It is only valid when
              * #IotMqttNetworkInfo_t::createNetworkConnection is `true`.
              */
-            void * pNetworkCredentialInfo;
+            IotNetworkCredentials_t pNetworkCredentialInfo;
         } setup;
 
         /**
@@ -969,7 +1051,7 @@ typedef struct IotMqttNetworkInfo
          * interface to reference an established network connection. It is only
          * valid when #IotMqttNetworkInfo_t::createNetworkConnection is `false`.
          */
-        void * pNetworkConnection;
+        IotNetworkConnection_t pNetworkConnection;
     } u /**< @brief Valid member depends of IotMqttNetworkInfo_t.createNetworkConnection. */;
 
     /**
@@ -1000,8 +1082,7 @@ typedef struct IotMqttNetworkInfo
 /*------------------------- MQTT defined constants --------------------------*/
 
 /**
- * @constants_page{mqtt}
- * @constants_brief{MQTT library}
+ * @constantspage{mqtt,MQTT library}
  *
  * @section mqtt_constants_initializers MQTT Initializers
  * @brief Provides default values for the data types of the MQTT library.
@@ -1036,8 +1117,8 @@ typedef struct IotMqttNetworkInfo
  *   @copybrief IOT_MQTT_FLAG_CLEANUP_ONLY
  *
  * Flags should be bitwise-ORed with each other to change the behavior of
- * @ref mqtt_function_subscribe, @ref mqtt_function_unsubscribe,
- * @ref mqtt_function_publish, or @ref mqtt_function_disconnect.
+ * @ref mqtt_function_subscribeasync, @ref mqtt_function_unsubscribeasync,
+ * @ref mqtt_function_publishasync, their blocking versions; or @ref mqtt_function_disconnect.
  *
  * @note The values of the flags may change at any time in future versions, but
  * their names will remain the same. Additionally, flags that may be used together
@@ -1061,13 +1142,15 @@ typedef struct IotMqttNetworkInfo
 #define IOT_MQTT_CONNECTION_INITIALIZER       NULL
 /** @brief Initializer for #IotMqttOperation_t. */
 #define IOT_MQTT_OPERATION_INITIALIZER        NULL
+/** @brief Initializer for #IotMqttPacketInfo_t. */
+#define IOT_MQTT_PACKET_INFO_INITIALIZER      { .pRemainingData = NULL, remainingLength = 0, packetIdentifier = 0, .type = 0 }
 /* @[define_mqtt_initializers] */
 
 /**
  * @brief Allows the use of @ref mqtt_function_wait for blocking until completion.
  *
- * This flag is always valid for @ref mqtt_function_subscribe and
- * @ref mqtt_function_unsubscribe. If passed to @ref mqtt_function_publish,
+ * This flag is always valid for @ref mqtt_function_subscribeasync and
+ * @ref mqtt_function_unsubscribeasync. If passed to @ref mqtt_function_publishasync,
  * the parameter [pPublishInfo->qos](@ref IotMqttPublishInfo_t.qos) must not be `0`.
  *
  * An #IotMqttOperation_t <b>MUST</b> be provided if this flag is set. Additionally, an
@@ -1076,7 +1159,7 @@ typedef struct IotMqttNetworkInfo
  * @note If this flag is set, @ref mqtt_function_wait <b>MUST</b> be called to clean up
  * resources.
  */
-#define IOT_MQTT_FLAG_WAITABLE        ( 0x00000001 )
+#define IOT_MQTT_FLAG_WAITABLE        ( 0x00000001U )
 
 /**
  * @brief Causes @ref mqtt_function_disconnect to only free memory and not send
@@ -1086,6 +1169,6 @@ typedef struct IotMqttNetworkInfo
  * to @ref mqtt_function_disconnect if the network goes offline or is otherwise
  * unusable.
  */
-#define IOT_MQTT_FLAG_CLEANUP_ONLY    ( 0x00000001 )
+#define IOT_MQTT_FLAG_CLEANUP_ONLY    ( 0x00000001UL )
 
 #endif /* ifndef IOT_MQTT_TYPES_H_ */

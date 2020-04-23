@@ -1,6 +1,6 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+ * IoT MQTT V2.1.0
+ * Copyright (C) 2018 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy of
  * this software and associated documentation files (the "Software"), to deal in
@@ -18,9 +18,6 @@
  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
  */
 
 /**
@@ -55,8 +52,11 @@
  */
 #if IOT_MQTT_ENABLE_ASSERTS == 1
     #ifndef IotMqtt_Assert
-        #include <assert.h>
-        #define IotMqtt_Assert( expression )    assert( expression )
+        #ifdef Iot_DefaultAssert
+            #define IotMqtt_Assert( expression )    Iot_DefaultAssert( expression )
+        #else
+            #error "Asserts are enabled for MQTT, but IotMqtt_Assert is not defined"
+        #endif
     #endif
 #else
     #define IotMqtt_Assert( expression )
@@ -81,7 +81,7 @@
  * the usage of dynamic memory allocation.
  */
 #if IOT_STATIC_MEMORY_ONLY == 1
-    #include "private/iot_static_memory.h"
+    #include "iot_static_memory.h"
 
 /**
  * @brief Allocate an #_mqttConnection_t. This function should have the same
@@ -139,38 +139,68 @@
  */
     void IotMqtt_FreeSubscription( void * ptr );
 #else /* if IOT_STATIC_MEMORY_ONLY == 1 */
-    #include <stdlib.h>
-
     #ifndef IotMqtt_MallocConnection
-        #define IotMqtt_MallocConnection    malloc
+        #ifdef Iot_DefaultMalloc
+            #define IotMqtt_MallocConnection    Iot_DefaultMalloc
+        #else
+            #error "No malloc function defined for IotMqtt_MallocConnection"
+        #endif
     #endif
 
     #ifndef IotMqtt_FreeConnection
-        #define IotMqtt_FreeConnection    free
+        #ifdef Iot_DefaultFree
+            #define IotMqtt_FreeConnection    Iot_DefaultFree
+        #else
+            #error "No free function defined for IotMqtt_FreeConnection"
+        #endif
     #endif
 
     #ifndef IotMqtt_MallocMessage
-        #define IotMqtt_MallocMessage    malloc
+        #ifdef Iot_DefaultMalloc
+            #define IotMqtt_MallocMessage    Iot_DefaultMalloc
+        #else
+            #error "No malloc function defined for IotMqtt_MallocMessage"
+        #endif
     #endif
 
     #ifndef IotMqtt_FreeMessage
-        #define IotMqtt_FreeMessage    free
+        #ifdef Iot_DefaultFree
+            #define IotMqtt_FreeMessage    Iot_DefaultFree
+        #else
+            #error "No free function defined for IotMqtt_FreeMessage"
+        #endif
     #endif
 
     #ifndef IotMqtt_MallocOperation
-        #define IotMqtt_MallocOperation    malloc
+        #ifdef Iot_DefaultMalloc
+            #define IotMqtt_MallocOperation    Iot_DefaultMalloc
+        #else
+            #error "No malloc function defined for IotMqtt_MallocOperation"
+        #endif
     #endif
 
     #ifndef IotMqtt_FreeOperation
-        #define IotMqtt_FreeOperation    free
+        #ifdef Iot_DefaultFree
+            #define IotMqtt_FreeOperation    Iot_DefaultFree
+        #else
+            #error "No free function defined for IotMqtt_FreeOperation"
+        #endif
     #endif
 
     #ifndef IotMqtt_MallocSubscription
-        #define IotMqtt_MallocSubscription    malloc
+        #ifdef Iot_DefaultMalloc
+            #define IotMqtt_MallocSubscription    Iot_DefaultMalloc
+        #else
+            #error "No malloc function defined for IotMqtt_MallocSubscription"
+        #endif
     #endif
 
     #ifndef IotMqtt_FreeSubscription
-        #define IotMqtt_FreeSubscription    free
+        #ifdef Iot_DefaultFree
+            #define IotMqtt_FreeSubscription    Iot_DefaultFree
+        #else
+            #error "No free function defined for IotMqtt_FreeSubscription"
+        #endif
     #endif
 #endif /* if IOT_STATIC_MEMORY_ONLY == 1 */
 
@@ -187,23 +217,16 @@
     #define IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES    ( 0 )
 #endif
 #ifndef IOT_MQTT_RESPONSE_WAIT_MS
-    #define IOT_MQTT_RESPONSE_WAIT_MS               ( 1000 )
+    #define IOT_MQTT_RESPONSE_WAIT_MS               ( 1000U )
 #endif
 #ifndef IOT_MQTT_RETRY_MS_CEILING
-    #define IOT_MQTT_RETRY_MS_CEILING               ( 60000 )
+    #define IOT_MQTT_RETRY_MS_CEILING               ( 60000U )
 #endif
 /** @endcond */
 
-/**
- * @brief Marks the empty statement of an `else` branch.
- *
- * Does nothing, but allows test coverage to detect branches not taken. By default,
- * this is defined to nothing. When running code coverage testing, this is defined
- * to an assembly NOP.
- */
-#ifndef EMPTY_ELSE_MARKER
-    #define EMPTY_ELSE_MARKER
-#endif
+#define MQTT_SERVER_MAX_CLIENTID_LENGTH                        ( ( uint16_t ) 23 )          /**< @brief Optional maximum length of client identifier specified by MQTT 3.1.1. */
+#define MQTT_SERVER_MAX_PUBLISH_PAYLOAD_LENGTH                 ( ( size_t ) ( 268435456 ) ) /**< @brief Maximum publish payload length supported by MQTT 3.1.1. */
+#define MQTT_SERVER_MAX_LWT_PAYLOAD_LENGTH                     ( ( size_t ) UINT16_MAX )    /**< @brief Maximum LWT payload length supported by MQTT 3.1.1. */
 
 /*
  * Constants related to limits defined in AWS Service Limits.
@@ -213,11 +236,10 @@
  *
  * Used to validate parameters if when connecting to an AWS IoT MQTT server.
  */
-#define AWS_IOT_MQTT_SERVER_MIN_KEEPALIVE                      ( 30 )   /**< @brief Minumum keep-alive interval accepted by AWS IoT. */
-#define AWS_IOT_MQTT_SERVER_MAX_KEEPALIVE                      ( 1200 ) /**< @brief Maximum keep-alive interval accepted by AWS IoT. */
-#define AWS_IOT_MQTT_SERVER_MAX_CLIENTID                       ( 128 )  /**< @brief Maximum length of client identifier accepted by AWS IoT. */
-#define AWS_IOT_MQTT_SERVER_MAX_TOPIC_LENGTH                   ( 256 )  /**< @brief Maximum length of topic names or filters accepted by AWS IoT. */
-#define AWS_IOT_MQTT_SERVER_MAX_TOPIC_FILTERS_PER_SUBSCRIBE    ( 8 )    /**< @brief Maximum number of topic filters in a single SUBSCRIBE packet. */
+#define AWS_IOT_MQTT_SERVER_MAX_CLIENTID_LENGTH                ( ( uint16_t ) 128 )      /**< @brief Maximum length of client identifier accepted by AWS IoT. */
+#define AWS_IOT_MQTT_SERVER_MAX_TOPIC_LENGTH                   ( ( uint16_t ) 256 )      /**< @brief Maximum length of topic names or filters accepted by AWS IoT. */
+#define AWS_IOT_MQTT_SERVER_MAX_TOPIC_FILTERS_PER_SUBSCRIBE    ( ( size_t ) 8 )          /**< @brief Maximum number of topic filters in a single SUBSCRIBE packet. */
+#define AWS_IOT_MQTT_SERVER_MAX_PUBLISH_PAYLOAD_LENGTH         ( ( size_t ) ( 131072 ) ) /**< @brief Maximum publish payload length accepted by AWS IoT. */
 
 /*
  * MQTT control packet type and flags. Always the first byte of an MQTT
@@ -228,7 +250,7 @@
  */
 #define MQTT_PACKET_TYPE_CONNECT                               ( ( uint8_t ) 0x10U ) /**< @brief CONNECT (client-to-server). */
 #define MQTT_PACKET_TYPE_CONNACK                               ( ( uint8_t ) 0x20U ) /**< @brief CONNACK (server-to-client). */
-#define MQTT_PACKET_TYPE_PUBLISH                               ( ( uint8_t ) 0x30U ) /**< @brief PUBLISH (bi-directional). */
+#define MQTT_PACKET_TYPE_PUBLISH                               ( ( uint8_t ) 0x30U ) /**< @brief PUBLISH (bidirectional). */
 #define MQTT_PACKET_TYPE_PUBACK                                ( ( uint8_t ) 0x40U ) /**< @brief PUBACK (server-to-client). */
 #define MQTT_PACKET_TYPE_SUBSCRIBE                             ( ( uint8_t ) 0x82U ) /**< @brief SUBSCRIBE (client-to-server). */
 #define MQTT_PACKET_TYPE_SUBACK                                ( ( uint8_t ) 0x90U ) /**< @brief SUBACK (server-to-client). */
@@ -245,72 +267,37 @@
  */
 #define MQTT_REMAINING_LENGTH_INVALID                          ( ( size_t ) 268435456 )
 
+/**
+ * @brief When this flag is passed, MQTT functions will execute jobs on the calling
+ * thread, bypassing the task pool.
+ *
+ * This flag is used along with @ref mqtt_constants_flags, but is intended for internal
+ * use only. Nevertheless, its value must be bitwise exclusive of all conflicting
+ * @ref mqtt_constants_flags.
+ */
+#define MQTT_INTERNAL_FLAG_BLOCK_ON_SEND                       ( 0x80000000U )
+
+/**
+ * @brief When calling #_IotMqtt_RemoveSubscriptionByPacket, use this value
+ * for `order` to delete all subscriptions for the packet.
+ *
+ * This flag is used along with @ref mqtt_constants_flags, but is intended for internal
+ * use only.
+ *
+ * @ref mqtt_constants_flags.
+ */
+#define MQTT_REMOVE_ALL_SUBSCRIPTIONS                          ( -1 )
+
 /*---------------------- MQTT internal data structures ----------------------*/
 
 /**
- * @brief Represents an MQTT connection.
+ * @cond DOXYGEN_IGNORE
+ * Doxygen should ignore this section.
+ *
+ * Forward declaration of MQTT connection type.
  */
-typedef struct _mqttConnection
-{
-    bool awsIotMqttMode;                             /**< @brief Specifies if this connection is to an AWS IoT MQTT server. */
-    bool ownNetworkConnection;                       /**< @brief Whether this MQTT connection owns its network connection. */
-    void * pNetworkConnection;                       /**< @brief References the transport-layer network connection. */
-    const IotNetworkInterface_t * pNetworkInterface; /**< @brief Network interface provided to @ref mqtt_function_connect. */
-    IotMqttCallbackInfo_t disconnectCallback;        /**< @brief A function to invoke when this connection is disconnected. */
-
-    #if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1
-        const IotMqttSerializer_t * pSerializer; /**< @brief MQTT packet serializer overrides. */
-    #endif
-
-    bool disconnected;                           /**< @brief Tracks if this connection has been disconnected. */
-    IotMutex_t referencesMutex;                  /**< @brief Recursive mutex. Grants access to connection state and operation lists. */
-    int32_t references;                          /**< @brief Counts callbacks and operations using this connection. */
-    IotListDouble_t pendingProcessing;           /**< @brief List of operations waiting to be processed by a task pool routine. */
-    IotListDouble_t pendingResponse;             /**< @brief List of processed operations awaiting a server response. */
-
-    IotListDouble_t subscriptionList;            /**< @brief Holds subscriptions associated with this connection. */
-    IotMutex_t subscriptionMutex;                /**< @brief Grants exclusive access to the subscription list. */
-
-    bool keepAliveFailure;                       /**< @brief Failure flag for keep-alive operation. */
-    uint32_t keepAliveMs;                        /**< @brief Keep-alive interval in milliseconds. Its max value (per spec) is 65,535,000. */
-    uint32_t nextKeepAliveMs;                    /**< @brief Relative delay for next keep-alive job. */
-    IotTaskPoolJobStorage_t keepAliveJobStorage; /**< @brief Task pool job for processing this connection's keep-alive. */
-    IotTaskPoolJob_t keepAliveJob;               /**< @brief Task pool job for processing this connection's keep-alive. */
-    uint8_t * pPingreqPacket;                    /**< @brief An MQTT PINGREQ packet, allocated if keep-alive is active. */
-    size_t pingreqPacketSize;                    /**< @brief The size of an allocated PINGREQ packet. */
-} _mqttConnection_t;
-
-/**
- * @brief Represents a subscription stored in an MQTT connection.
- */
-typedef struct _mqttSubscription
-{
-    IotLink_t link;     /**< @brief List link member. */
-
-    int32_t references; /**< @brief How many subscription callbacks are using this subscription. */
-
-    /**
-     * @brief Tracks whether @ref mqtt_function_unsubscribe has been called for
-     * this subscription.
-     *
-     * If there are active subscription callbacks, @ref mqtt_function_unsubscribe
-     * cannot remove this subscription. Instead, it will set this flag, which
-     * schedules the removal of this subscription once all subscription callbacks
-     * terminate.
-     */
-    bool unsubscribed;
-
-    struct
-    {
-        uint16_t identifier;        /**< @brief Packet identifier. */
-        size_t order;               /**< @brief Order in the packet's list of subscriptions. */
-    } packetInfo;                   /**< @brief Information about the SUBSCRIBE packet that registered this subscription. */
-
-    IotMqttCallbackInfo_t callback; /**< @brief Callback information for this subscription. */
-
-    uint16_t topicFilterLength;     /**< @brief Length of #_mqttSubscription_t.pTopicFilter. */
-    char pTopicFilter[];            /**< @brief The subscription topic filter. */
-} _mqttSubscription_t;
+struct _mqttConnection;
+/** @endcond */
 
 /**
  * @brief Internal structure representing a single MQTT operation, such as
@@ -321,14 +308,17 @@ typedef struct _mqttSubscription
 typedef struct _mqttOperation
 {
     /* Pointers to neighboring queue elements. */
-    IotLink_t link;                      /**< @brief List link member. */
+    IotLink_t link;                           /**< @brief List link member. */
 
-    bool incomingPublish;                /**< @brief Set to true if this operation an incoming PUBLISH. */
-    _mqttConnection_t * pMqttConnection; /**< @brief MQTT connection associated with this operation. */
+    bool incomingPublish;                     /**< @brief Set to true if this operation is an incoming PUBLISH. */
+    struct _mqttConnection * pMqttConnection; /**< @brief MQTT connection associated with this operation. */
 
-    IotTaskPoolJobStorage_t jobStorage;  /**< @brief Task pool job storage associated with this operation. */
-    IotTaskPoolJob_t job;                /**< @brief Task pool job associated with this operation. */
+    IotTaskPoolJobStorage_t jobStorage;       /**< @brief Task pool job storage associated with this operation. */
+    IotTaskPoolJob_t job;                     /**< @brief Task pool job associated with this operation. */
 
+    /* MISRA rule 19.2 doesn't allow usage of union
+     * but it is intentionally used here to reduce the size of struct. */
+    /* coverity[misra_c_2012_rule_19_2_violation] */
     union
     {
         /* If incomingPublish is false, this struct is valid. */
@@ -346,6 +336,10 @@ typedef struct _mqttOperation
             size_t packetSize;               /**< @brief Size of `pMqttPacket`. */
 
             /* How to notify of an operation's completion. */
+
+            /* MISRA rule 19.2 doesn't allow usage of union
+             * but it is intentionally used here to reduce the size of struct. */
+            /* coverity[misra_c_2012_rule_19_2_violation] */
             union
             {
                 IotSemaphore_t waitSemaphore;   /**< @brief Semaphore to be used with @ref mqtt_function_wait. */
@@ -353,22 +347,96 @@ typedef struct _mqttOperation
             } notify;                           /**< @brief How to notify of this operation's completion. */
             IotMqttError_t status;              /**< @brief Result of this operation. This is reported once a response is received. */
 
-            struct
+            /* MISRA rule 19.2 doesn't allow usage of union
+             * but it is intentionally used here to reduce the size of struct. */
+            /* coverity[misra_c_2012_rule_19_2_violation] */
+            union
             {
-                uint32_t count;
-                uint32_t limit;
-                uint32_t nextPeriod;
-            } retry;
+                struct
+                {
+                    uint32_t count;        /**< @brief Current number of retries. */
+                    uint32_t limit;        /**< @brief Maximum number of retries allowed. */
+                    uint32_t nextPeriodMs; /**< @brief Next retry period. */
+                } retry;                   /**< @brief Additional information for PUBLISH retry. */
+
+                struct
+                {
+                    uint32_t failure;      /**< @brief Flag tracking keep-alive status. */
+                    uint32_t keepAliveMs;  /**< @brief Keep-alive interval in milliseconds. Its max value (per spec) is 65,535,000. */
+                    uint32_t nextPeriodMs; /**< @brief Relative delay for next keep-alive job. */
+                } ping;                    /**< @brief Additional information for keep-alive pings. */
+            } periodic;                    /**< @brief Additional information for periodic operations. */
         } operation;
 
         /* If incomingPublish is true, this struct is valid. */
         struct
         {
             IotMqttPublishInfo_t publishInfo; /**< @brief Deserialized PUBLISH. */
-            const void * pReceivedData;       /**< @brief Any buffer associated with this PUBLISH that should be freed. */
+            void * pReceivedData;             /**< @brief Any buffer associated with this PUBLISH that should be freed. */
         } publish;
     } u;                                      /**< @brief Valid member depends on _mqttOperation_t.incomingPublish. */
 } _mqttOperation_t;
+
+/**
+ * @brief Represents an MQTT connection.
+ */
+typedef struct _mqttConnection
+{
+    bool awsIotMqttMode;                             /**< @brief Specifies if this connection is to an AWS IoT MQTT server. */
+    bool ownNetworkConnection;                       /**< @brief Whether this MQTT connection owns its network connection. */
+    IotNetworkConnection_t pNetworkConnection;       /**< @brief References the transport-layer network connection. */
+    const IotNetworkInterface_t * pNetworkInterface; /**< @brief Network interface provided to @ref mqtt_function_connect. */
+    IotMqttCallbackInfo_t disconnectCallback;        /**< @brief A function to invoke when this connection is disconnected. */
+
+    const IotMqttSerializer_t * pSerializer;         /**< @brief MQTT packet serializer overrides. */
+
+    bool disconnected;                               /**< @brief Tracks if this connection has been disconnected. */
+    IotMutex_t referencesMutex;                      /**< @brief Recursive mutex. Grants access to connection state and operation lists. */
+    int32_t references;                              /**< @brief Counts callbacks and operations using this connection. */
+    IotListDouble_t pendingProcessing;               /**< @brief List of operations waiting to be processed by a task pool routine. */
+    IotListDouble_t pendingResponse;                 /**< @brief List of processed operations awaiting a server response. */
+
+    IotListDouble_t subscriptionList;                /**< @brief Holds subscriptions associated with this connection. */
+    IotMutex_t subscriptionMutex;                    /**< @brief Grants exclusive access to the subscription list. */
+
+    uint64_t lastMessageTime;                        /**< @brief When the most recent message was transmitted. */
+    _mqttOperation_t pingreq;                        /**< @brief Operation used for MQTT keep-alive. */
+} _mqttConnection_t;
+
+/**
+ * @brief Represents a subscription stored in an MQTT connection.
+ */
+typedef struct _mqttSubscription
+{
+    IotLink_t link;     /**< @brief List link member. */
+
+    int32_t references; /**< @brief How many subscription callbacks are using this subscription. */
+
+    /**
+     * @brief Tracks whether an unsubscribe function has been called for
+     * this subscription.
+     *
+     * If there are active subscription callbacks, this subscription cannot be removed.
+     * Instead, this flag will be set, which schedules the removal of this subscription
+     * once all subscription callbacks terminate.
+     */
+    bool unsubscribed;
+
+    struct
+    {
+        uint16_t identifier;        /**< @brief Packet identifier. */
+        size_t order;               /**< @brief Order in the packet's list of subscriptions. */
+    } packetInfo;                   /**< @brief Information about the SUBSCRIBE packet that registered this subscription. */
+
+    IotMqttCallbackInfo_t callback; /**< @brief Callback information for this subscription. */
+
+    uint16_t topicFilterLength;     /**< @brief Length of #_mqttSubscription_t.pTopicFilter. */
+
+    /* A flexible length array is used here so that the topic filter may
+     * be of an arbitrary length. */
+    /* coverity[misra_c_2012_rule_18_7_violation] */
+    char pTopicFilter[]; /**< @brief The subscription topic filter. */
+} _mqttSubscription_t;
 
 /**
  * @brief Represents an MQTT packet received from the network.
@@ -378,6 +446,9 @@ typedef struct _mqttOperation
  */
 typedef struct _mqttPacket
 {
+    /* MISRA rule 19.2 doesn't allow usage of union
+     * but it is intentionally used here to reduce the size of struct. */
+    /* coverity[misra_c_2012_rule_19_2_violation] */
     union
     {
         /**
@@ -411,16 +482,34 @@ typedef struct _mqttPacket
 bool _IotMqtt_ValidateConnect( const IotMqttConnectInfo_t * pConnectInfo );
 
 /**
- * @brief Check that an #IotMqttPublishInfo_t is valid.
+ * @brief Check that parameters for an MQTT PUBLISH are valid.
  *
  * @param[in] awsIotMqttMode Specifies if this PUBLISH packet is being sent to
  * an AWS IoT MQTT server.
  * @param[in] pPublishInfo The #IotMqttPublishInfo_t to validate.
+ * @param[in] flags Behavior modification flags to validate. See @ref mqtt_constants_flags.
+ * @param[in] pCallbackInfo #IotMqttCallbackInfo_t to validate.
+ * @param[in] pPublishOperation Handle to a PUBLISH operation.
  *
- * @return `true` if `pPublishInfo` is valid; `false` otherwise.
+ * @return `true` if all parameters are valid; `false` otherwise.
  */
 bool _IotMqtt_ValidatePublish( bool awsIotMqttMode,
-                               const IotMqttPublishInfo_t * pPublishInfo );
+                               const IotMqttPublishInfo_t * pPublishInfo,
+                               uint32_t flags,
+                               const IotMqttCallbackInfo_t * pCallbackInfo,
+                               const IotMqttOperation_t * const pPublishOperation );
+
+/**
+ * @brief Check that an #IotMqttPublishInfo_t is valid for an LWT publish
+ *
+ * @param[in] awsIotMqttMode Specifies if this PUBLISH packet is being sent to
+ * an AWS IoT MQTT server.
+ * @param[in] pLwtPublishInfo The #IotMqttPublishInfo_t to validate.
+ *
+ * @return `true` if `pLwtPublishInfo` is valid; `false` otherwise.
+ */
+bool _IotMqtt_ValidateLwtPublish( bool awsIotMqttMode,
+                                  const IotMqttPublishInfo_t * pLwtPublishInfo );
 
 /**
  * @brief Check that an #IotMqttOperation_t is valid and waitable.
@@ -462,7 +551,7 @@ bool _IotMqtt_ValidateSubscriptionList( IotMqttOperationType_t operation,
  * @note This function is only used for incoming packets, and may not work
  * correctly for outgoing packets.
  */
-uint8_t _IotMqtt_GetPacketType( void * pNetworkConnection,
+uint8_t _IotMqtt_GetPacketType( IotNetworkConnection_t pNetworkConnection,
                                 const IotNetworkInterface_t * pNetworkInterface );
 
 /**
@@ -474,9 +563,8 @@ uint8_t _IotMqtt_GetPacketType( void * pNetworkConnection,
  *
  * @return The remaining length; #MQTT_REMAINING_LENGTH_INVALID on error.
  */
-size_t _IotMqtt_GetRemainingLength( void * pNetworkConnection,
+size_t _IotMqtt_GetRemainingLength( IotNetworkConnection_t pNetworkConnection,
                                     const IotNetworkInterface_t * pNetworkInterface );
-
 /**
  * @brief Generate a CONNECT packet from the given parameters.
  *
@@ -844,7 +932,7 @@ void _IotMqtt_InvokeSubscriptionCallback( _mqttConnection_t * pMqttConnection,
  * @param[in] packetIdentifier The packet identifier associated with the subscription's
  * SUBSCRIBE packet.
  * @param[in] order The order of the subscription in the SUBSCRIBE packet.
- * Pass `-1` to ignore order and remove all subscriptions for `packetIdentifier`.
+ * Pass #MQTT_REMOVE_ALL_SUBSCRIPTIONS to ignore order and remove all subscriptions for `packetIdentifier`.
  */
 void _IotMqtt_RemoveSubscriptionByPacket( _mqttConnection_t * pMqttConnection,
                                           uint16_t packetIdentifier,
@@ -894,7 +982,7 @@ void _IotMqtt_DecrementConnectionReferences( _mqttConnection_t * pMqttConnection
  * @return `true` if a byte was successfully received from the network; `false`
  * otherwise.
  */
-bool _IotMqtt_GetNextByte( void * pNetworkConnection,
+bool _IotMqtt_GetNextByte( IotNetworkConnection_t pNetworkConnection,
                            const IotNetworkInterface_t * pNetworkInterface,
                            uint8_t * pIncomingByte );
 
@@ -911,5 +999,27 @@ bool _IotMqtt_GetNextByte( void * pNetworkConnection,
  */
 void _IotMqtt_CloseNetworkConnection( IotMqttDisconnectReason_t disconnectReason,
                                       _mqttConnection_t * pMqttConnection );
+
+#if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1
+
+/**
+ * @brief Utility macro for creating serializer override selector functions
+ */
+    #define SERIALIZER_OVERRIDE_SELECTOR( funcType_t, funcName, defaultFunc, serializerMember ) \
+    static funcType_t funcName( const IotMqttSerializer_t * pSerializer );                      \
+    static funcType_t funcName( const IotMqttSerializer_t * pSerializer )                       \
+    {                                                                                           \
+        funcType_t returnValue = defaultFunc;                                                   \
+        if( pSerializer != NULL )                                                               \
+        {                                                                                       \
+            if( pSerializer->serializerMember != NULL )                                         \
+            {                                                                                   \
+                returnValue = pSerializer->serializerMember;                                    \
+            }                                                                                   \
+        }                                                                                       \
+                                                                                                \
+        return returnValue;                                                                     \
+    }
+#endif /* if IOT_MQTT_ENABLE_SERIALIZER_OVERRIDES == 1 */
 
 #endif /* ifndef IOT_MQTT_INTERNAL_H_ */
