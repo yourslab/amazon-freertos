@@ -40,7 +40,7 @@ export AFR_C_SDK_AWS_PATH := ../../../../../libraries/c_sdk/aws/
 export AFR_ABSTRACTIONS_PATH := ../../../../../libraries/abstractions/
 export AFR_FREERTOS_PLUS_STANDARD_PATH = ../../../../../libraries/freertos_plus/standard/
 export AFR_FREERTOS_PLUS_AWS_PATH = ../../../../../libraries/freertos_plus/aws/
-export C_SDK_UW_PATH :=  ../../../../../../aws-iot-device-sdk-embedded-C/libraries/standard/
+export C_SDK_UW_PATH :=  ../../../../../libraries/c_sdk/standard/
 
 $(NAME)_SOURCES :=  $(AFR_FREERTOS_PLUS_AWS_PATH)greengrass/src/aws_greengrass_discovery.c        \
                     $(AFR_FREERTOS_PLUS_AWS_PATH)greengrass/src/aws_helper_secure_connect.c       \

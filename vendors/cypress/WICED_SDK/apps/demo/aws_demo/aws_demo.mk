@@ -43,7 +43,7 @@ export AFR_C_SDK_AWS_PATH := ../../../../../../libraries/c_sdk/aws/
 export AFR_FREERTOS_PLUS_STANDARD_PATH = ../../../../../../libraries/freertos_plus/standard/
 export AFR_FREERTOS_PLUS_AWS_PATH = ../../../../../../libraries/freertos_plus/aws/
 export AFR_ABSTRACTIONS_PATH := ../../../../../../libraries/abstractions/
-export C_SDK_UW_PATH :=  ../../../../../../../aws-iot-device-sdk-embedded-C/libraries/standard/
+export C_SDK_UW_PATH :=  ../../../../../../libraries/c_sdk/standard/
 
 GLOBAL_INCLUDES +=  $(AMAZON_FREERTOS_PATH)demos/include \
                     $(AFR_C_SDK_STANDARD_PATH)common/include \
