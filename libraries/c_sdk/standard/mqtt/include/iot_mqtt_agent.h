@@ -31,8 +31,20 @@
 #ifndef _AWS_MQTT_AGENT_H_
 #define _AWS_MQTT_AGENT_H_
 
+/* compiler_warning.h */
+#define STRINGISE_IMPL( x )    # x
+#define STRINGISE( x )         STRINGISE_IMPL( x )
+
+/* Use: #pragma message WARN("My message") */
+#if _MSC_VER
+    #define FILE_LINE_LINK    __FILE__ "(" STRINGISE( __LINE__ ) ") : "
+    #define WARN( exp )    ( FILE_LINE_LINK "WARNING: " exp )
+#else //__GNUC__ - may need other defines for different compilers
+    #define WARN( exp )    ( "WARNING: " exp )
+#endif
+
 /* Display a warning about future deprecation of 1.4x MQTT API. */
-#warning "1.4x MQTT API is on the path of DEPRECATION"
+#pragma message WARN("1.4x MQTT API is on the path of DEPRECATION")
 
 /* FreeRTOS includes. */
 #include "FreeRTOS.h"
