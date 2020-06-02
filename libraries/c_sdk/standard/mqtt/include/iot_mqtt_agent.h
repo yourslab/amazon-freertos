@@ -34,7 +34,7 @@
 /* Display a warning about future deprecation of 1.4x MQTT API. */
 #define DEPRECATION_WARN    "1.4x MQTT API is on the path of DEPRECATION"
 
-/* Use: #pragma message WARN("My message") */
+/* Display warning message depending on platform/toolchain. */
 #if _MSC_VER
     #define STRINGISE_IMPL( x )    # x
     #define STRINGISE( x )         STRINGISE_IMPL( x )
