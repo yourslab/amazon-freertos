@@ -61,11 +61,13 @@
     #define STRINGISE( x )         STRINGISE_IMPL( x )
     #define FILE_LINE_LINK    __FILE__ "(" STRINGISE( __LINE__ ) ") : "
     #pragma message ( __FILE__ "(" STRINGISE( __LINE__ ) ") : WARNING: " DEPRECATION_WARN )
-#elif defined( __IAR_SYSTEMS_ICC__ ) - may need other defines for different compilers
+#elif defined( __IAR_SYSTEMS_ICC__ )
     #pragma message( DEPRECATION_WARN )
-#elif defined( __GNUC__ )
+#elif defined( __GNUC__ ) || defined( __RENESAS_VERSION__ )
     #warning DEPRECATION_WARN
-#endif
+#elif defined( __TI_COMPILER_VERSION__ )
+    #warn DEPRECATION_WARN
+#endif /* ifdef _MSC_VER */
 
 /**
   * @brief Converts FreeRTOS ticks to milliseconds.
