@@ -64,7 +64,7 @@
 #elif defined( __IAR_SYSTEMS_ICC__ )
     #pragma message( DEPRECATION_WARN )
 #elif defined( __GNUC__ )
-    #pragma message DEPRECATION_WARN
+    #pragma message ( "WARNING:" DEPRECATION_WARN )
 #elif defined( __RENESAS_VERSION__ )
     #warning DEPRECATION_WARN
 #elif defined( __TI_COMPILER_VERSION__ )
