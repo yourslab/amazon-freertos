@@ -61,14 +61,12 @@
     #define STRINGISE( x )         STRINGISE_IMPL( x )
     #define FILE_LINE_LINK    __FILE__ "(" STRINGISE( __LINE__ ) ") : "
     #pragma message ( __FILE__ "(" STRINGISE( __LINE__ ) ") : WARNING: " DEPRECATION_WARN )
-#elif defined( __IAR_SYSTEMS_ICC__ )
-    #warning DEPRECATION_WARN
-#elif defined( __GNUC__ )
+#elif defined( __GNUC__ ) /* GCC compilers issue -Wcpp warning for #warning directive. */
     #pragma message ( "WARNING:" DEPRECATION_WARN )
-#elif defined( __RENESAS_VERSION__ )
-    #warning "1.4x MQTT API is on the path of DEPRECATION"
 #elif defined( __TI_COMPILER_VERSION__ )
     #warn "1.4x MQTT API is on the path of DEPRECATION"
+#else /* IAR and Renesas toolchains support #warning directive. */
+    #warning "1.4x MQTT API is on the path of DEPRECATION"
 #endif /* ifdef _MSC_VER */
 
 /**
