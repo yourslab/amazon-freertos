@@ -68,7 +68,7 @@
 #elif defined( __RENESAS_VERSION__ )
     #warning "1.4x MQTT API is on the path of DEPRECATION"
 #elif defined( __TI_COMPILER_VERSION__ )
-    #warn DEPRECATION_WARN
+    #warn "1.4x MQTT API is on the path of DEPRECATION"
 #endif /* ifdef _MSC_VER */
 
 /**
