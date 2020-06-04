@@ -53,7 +53,9 @@
 /*-----------------------------------------------------------*/
 
 /* Display a warning about future deprecation of 1.4x MQTT API. */
-#define DEPRECATION_WARN    "1.4x MQTT API is on the path of DEPRECATION"
+#define DEPRECATION_WARN                                          \
+    "1.4x MQTT compatability API is on the path of DEPRECATION. " \
+    "Please contact AWS for support."
 
 /* Display warning message depending on platform/toolchain. */
 #ifdef _MSC_VER
@@ -64,9 +66,9 @@
 #elif defined( __GNUC__ ) /* GCC compilers issue -Wcpp warning for #warning directive. */
     #pragma message ( "WARNING:" DEPRECATION_WARN )
 #elif defined( __TI_COMPILER_VERSION__ )
-    #warn "1.4x MQTT API is on the path of DEPRECATION"
+    #warn "1.4x MQTT API is on the path of DEPRECATION. Please contact AWS for support."
 #else /* IAR and Renesas toolchains support #warning directive. */
-    #warning "1.4x MQTT API is on the path of DEPRECATION"
+    #warning "1.4x MQTT API is on the path of DEPRECATION. Please contact AWS for support."
 #endif /* ifdef _MSC_VER */
 
 /**
