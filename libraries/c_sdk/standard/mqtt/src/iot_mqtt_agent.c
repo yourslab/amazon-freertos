@@ -63,7 +63,9 @@
     #pragma message ( __FILE__ "(" STRINGISE( __LINE__ ) ") : WARNING: " DEPRECATION_WARN )
 #elif defined( __IAR_SYSTEMS_ICC__ )
     #pragma message( DEPRECATION_WARN )
-#elif defined( __GNUC__ ) || defined( __RENESAS_VERSION__ )
+#elif defined( __GNUC__ )
+    #pragma message DEPRECATION_WARN
+#elif defined( __RENESAS_VERSION__ )
     #warning DEPRECATION_WARN
 #elif defined( __TI_COMPILER_VERSION__ )
     #warn DEPRECATION_WARN
