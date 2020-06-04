@@ -62,7 +62,7 @@
     #define FILE_LINE_LINK    __FILE__ "(" STRINGISE( __LINE__ ) ") : "
     #pragma message ( __FILE__ "(" STRINGISE( __LINE__ ) ") : WARNING: " DEPRECATION_WARN )
 #elif defined( __IAR_SYSTEMS_ICC__ )
-    #pragma message( "1.4x MQTT API is on the path of DEPRECATION" )
+    #warning DEPRECATION_WARN
 #elif defined( __GNUC__ )
     #pragma message ( "WARNING:" DEPRECATION_WARN )
 #elif defined( __RENESAS_VERSION__ )
