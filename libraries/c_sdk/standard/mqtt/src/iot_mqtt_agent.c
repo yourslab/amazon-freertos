@@ -1,33 +1,33 @@
 /*
- * FreeRTOS MQTT V2.1.1
- * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy of
- * this software and associated documentation files (the "Software"), to deal in
- * the Software without restriction, including without limitation the rights to
- * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- * the Software, and to permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in all
- * copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- *
- * http://aws.amazon.com/freertos
- * http://www.FreeRTOS.org
- */
+  * FreeRTOS MQTT V2.1.1
+  * Copyright (C) 2020 Amazon.com, Inc. or its affiliates.  All Rights Reserved.
+  *
+  * Permission is hereby granted, free of charge, to any person obtaining a copy of
+  * this software and associated documentation files (the "Software"), to deal in
+  * the Software without restriction, including without limitation the rights to
+  * use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+  * the Software, and to permit persons to whom the Software is furnished to do so,
+  * subject to the following conditions:
+  *
+  * The above copyright notice and this permission notice shall be included in all
+  * copies or substantial portions of the Software.
+  *
+  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+  * FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+  * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+  * IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+  *
+  * http://aws.amazon.com/freertos
+  * http://www.FreeRTOS.org
+  */
 
 /**
- * @file iot_mqtt_agent.c
- * @brief MQTT Agent implementation. Provides backwards compatibility between
- * MQTT v2 and MQTT v1.
- */
+  * @file iot_mqtt_agent.c
+  * @brief MQTT Agent implementation. Provides backwards compatibility between
+  * MQTT v2 and MQTT v1.
+  */
 
 /* The config header is always included first. */
 #include "iot_config.h"
@@ -52,17 +52,32 @@
 
 /*-----------------------------------------------------------*/
 
+/* Display a warning about future deprecation of 1.4x MQTT API. */
+#define DEPRECATION_WARN    "1.4x MQTT API is on the path of DEPRECATION"
+
+/* Display warning message depending on platform/toolchain. */
+#ifdef _MSC_VER
+    #define STRINGISE_IMPL( x )    # x
+    #define STRINGISE( x )         STRINGISE_IMPL( x )
+    #define FILE_LINE_LINK    __FILE__ "(" STRINGISE( __LINE__ ) ") : "
+    #pragma message ( __FILE__ "(" STRINGISE( __LINE__ ) ") : WARNING: " DEPRECATION_WARN )
+#elif defined( __IAR_SYSTEMS_ICC__ ) - may need other defines for different compilers
+    #pragma message( DEPRECATION_WARN )
+#elif defined( __GNUC__ )
+    #warning DEPRECATION_WARN
+#endif
+
 /**
- * @brief Converts FreeRTOS ticks to milliseconds.
- */
+  * @brief Converts FreeRTOS ticks to milliseconds.
+  */
 #define mqttTICKS_TO_MS( xTicks )    ( xTicks * 1000 / configTICK_RATE_HZ )
 
 /*-----------------------------------------------------------*/
 
 /**
- * @brief Stores data to convert between the MQTT v1 subscription callback
- * and the MQTT v2 subscription callback.
- */
+  * @brief Stores data to convert between the MQTT v1 subscription callback
+  * and the MQTT v2 subscription callback.
+  */
 #if ( mqttconfigENABLE_SUBSCRIPTION_MANAGEMENT == 1 )
     typedef struct MQTTCallback
     {
@@ -76,8 +91,8 @@
 #endif
 
 /**
- * @brief Stores data on an active MQTT connection.
- */
+  * @brief Stores data on an active MQTT connection.
+  */
 typedef struct MQTTConnection
 {
     IotMqttConnection_t xMQTTConnection; /**< MQTT v2 connection handle. */
@@ -93,45 +108,45 @@ typedef struct MQTTConnection
 /*-----------------------------------------------------------*/
 
 /**
- * @brief Convert an MQTT v2 return code to an MQTT v1 return code.
- *
- * @param[in] xMqttStatus The MQTT v2 return code.
- *
- * @return An equivalent MQTT v1 return code.
- */
+  * @brief Convert an MQTT v2 return code to an MQTT v1 return code.
+  *
+  * @param[in] xMqttStatus The MQTT v2 return code.
+  *
+  * @return An equivalent MQTT v1 return code.
+  */
 static inline MQTTAgentReturnCode_t prvConvertReturnCode( IotMqttError_t xMqttStatus );
 
 /**
- * @brief Wraps an MQTT v1 publish callback.
- *
- * @param[in] pvParameter The MQTT connection.
- * @param[in] pxPublish Information about the incoming publish.
- */
+  * @brief Wraps an MQTT v1 publish callback.
+  *
+  * @param[in] pvParameter The MQTT connection.
+  * @param[in] pxPublish Information about the incoming publish.
+  */
 static void prvPublishCallbackWrapper( void * pvParameter,
                                        IotMqttCallbackParam_t * const pxPublish );
 
 /**
- * @brief Wraps an MQTT v1 disconnect callback.
- *
- * @param[in] pvCallbackContext The MQTT connection.
- * @param[in] pxDisconnect Information about the disconnect.
- */
+  * @brief Wraps an MQTT v1 disconnect callback.
+  *
+  * @param[in] pvCallbackContext The MQTT connection.
+  * @param[in] pxDisconnect Information about the disconnect.
+  */
 static void prvDisconnectCallbackWrapper( void * pvParameter,
                                           IotMqttCallbackParam_t * pxDisconnect );
 
 #if ( mqttconfigENABLE_SUBSCRIPTION_MANAGEMENT == 1 )
 
 /**
- * @brief Store an MQTT v1 callback in the conversion table.
- *
- * @param[in] pxConnection Where to store the callback.
- * @param[in] pcTopicFilter Topic filter to store.
- * @param[in] usTopicFilterLength Length of pcTopicFilter.
- * @param[in] xCallback MQTT v1 callback to store.
- * @param[in] pvParameter Parameter to xCallback.
- *
- * @return pdPASS if the callback was successfully stored; pdFAIL otherwise.
- */
+  * @brief Store an MQTT v1 callback in the conversion table.
+  *
+  * @param[in] pxConnection Where to store the callback.
+  * @param[in] pcTopicFilter Topic filter to store.
+  * @param[in] usTopicFilterLength Length of pcTopicFilter.
+  * @param[in] xCallback MQTT v1 callback to store.
+  * @param[in] pvParameter Parameter to xCallback.
+  *
+  * @return pdPASS if the callback was successfully stored; pdFAIL otherwise.
+  */
     static BaseType_t prvStoreCallback( MQTTConnection_t * const pxConnection,
                                         const char * const pcTopicFilter,
                                         uint16_t usTopicFilterLength,
@@ -139,27 +154,27 @@ static void prvDisconnectCallbackWrapper( void * pvParameter,
                                         void * pvParameter );
 
 /**
- * @brief Search the callback conversion table for the given topic filter.
- *
- * @param[in] pxConnection The connection containing the conversion table.
- * @param[in] pcTopicFilter The topic filter to search for.
- * @param[in] usTopicFilterLength The length of pcTopicFilter.
- *
- * @return A pointer to the callback entry if found; NULL otherwise.
- * @note This function should be called with pxConnection->xConnectionMutex
- * locked.
- */
+  * @brief Search the callback conversion table for the given topic filter.
+  *
+  * @param[in] pxConnection The connection containing the conversion table.
+  * @param[in] pcTopicFilter The topic filter to search for.
+  * @param[in] usTopicFilterLength The length of pcTopicFilter.
+  *
+  * @return A pointer to the callback entry if found; NULL otherwise.
+  * @note This function should be called with pxConnection->xConnectionMutex
+  * locked.
+  */
     static MQTTCallback_t * prvFindCallback( MQTTConnection_t * const pxConnection,
                                              const char * const pcTopicFilter,
                                              uint16_t usTopicFilterLength );
 
 /**
- * @brief Remove a topic filter from the callback conversion table.
- *
- * @param[in] pxConnection The connection containing the conversion table.
- * @param[in] pcTopicFilter The topic filter to remove.
- * @param[in] usTopicFilterLength The length of pcTopic.
- */
+  * @brief Remove a topic filter from the callback conversion table.
+  *
+  * @param[in] pxConnection The connection containing the conversion table.
+  * @param[in] pcTopicFilter The topic filter to remove.
+  * @param[in] usTopicFilterLength The length of pcTopic.
+  */
     static void prvRemoveCallback( MQTTConnection_t * const pxConnection,
                                    const char * const pcTopicFilter,
                                    uint16_t usTopicFilterLength );
@@ -168,9 +183,9 @@ static void prvDisconnectCallbackWrapper( void * pvParameter,
 /*-----------------------------------------------------------*/
 
 /**
- * @brief The number of available MQTT brokers, controlled by the constant
- * mqttconfigMAX_BROKERS;
- */
+  * @brief The number of available MQTT brokers, controlled by the constant
+  * mqttconfigMAX_BROKERS;
+  */
 static UBaseType_t uxAvailableBrokers = mqttconfigMAX_BROKERS;
 
 /*-----------------------------------------------------------*/
@@ -238,11 +253,11 @@ static void prvPublishCallbackWrapper( void * pvParameter,
         else
         {
             /* Copy the topic name and payload. The topic name and payload must be
-             * copied in case the user decides to take ownership of the MQTT buffer.
-             * The original buffer containing the MQTT topic name and payload may
-             * contain further unprocessed packets and must remain property of the
-             * MQTT library. Therefore, the topic name and payload are copied into
-             * another buffer for the user. */
+              * copied in case the user decides to take ownership of the MQTT buffer.
+              * The original buffer containing the MQTT topic name and payload may
+              * contain further unprocessed packets and must remain property of the
+              * MQTT library. Therefore, the topic name and payload are copied into
+              * another buffer for the user. */
             ( void ) memcpy( pucMqttBuffer,
                              pxPublish->u.message.info.pTopicName,
                              pxPublish->u.message.info.topicNameLength );
@@ -291,7 +306,7 @@ static void prvPublishCallbackWrapper( void * pvParameter,
         #else /* if ( mqttconfigENABLE_SUBSCRIPTION_MANAGEMENT == 1 ) */
 
             /* When subscription management is disabled, invoke the global callback
-             * if one exists. */
+              * if one exists. */
 
             /* When subscription management is disabled, the topic filter must be "#". */
             mqttconfigASSERT( *( xPublish.message.pTopicFilter ) == '#' );
@@ -343,7 +358,7 @@ static void prvDisconnectCallbackWrapper( void * pvParameter,
         BaseType_t xStatus = pdFAIL, i = 0;
 
         /* Prevent other tasks from modifying stored callbacks while this function
-         * runs. */
+          * runs. */
         if( xSemaphoreTake( ( QueueHandle_t ) &( pxConnection->xConnectionMutex ),
                             portMAX_DELAY ) == pdTRUE )
         {
@@ -414,7 +429,7 @@ static void prvDisconnectCallbackWrapper( void * pvParameter,
         MQTTCallback_t * pxCallback = NULL;
 
         /* Prevent other tasks from modifying stored callbacks while this function
-         * runs. */
+          * runs. */
         if( xSemaphoreTake( ( QueueHandle_t ) &( pxConnection->xConnectionMutex ),
                             portMAX_DELAY ) == pdTRUE )
         {
@@ -612,7 +627,7 @@ MQTTAgentReturnCode_t MQTT_AGENT_Connect( MQTTAgentHandle_t xMQTTHandle,
     xStatus = prvConvertReturnCode( xMqttStatus );
 
     /* Add a subscription to "#" to support the global callback when subscription
-     * manager is disabled. */
+      * manager is disabled. */
     #if ( mqttconfigENABLE_SUBSCRIPTION_MANAGEMENT == 0 )
         IotMqttSubscription_t xGlobalSubscription = IOT_MQTT_SUBSCRIPTION_INITIALIZER;
         IotMqttReference_t xGlobalSubscriptionRef = IOT_MQTT_REFERENCE_INITIALIZER;
