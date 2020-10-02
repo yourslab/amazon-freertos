@@ -74,7 +74,7 @@
 #endif
 
 #ifndef LIBRARY_LOG_LEVEL
-    #define LIBRARY_LOG_LEVEL    LOG_INFO
+    #define LIBRARY_LOG_LEVEL    LOG_DEBUG
 #endif
 #include "logging_stack.h"
 
@@ -837,6 +837,7 @@ static bool connectToServerWithBackoffRetries( NetworkContext_t * pNetworkContex
         }
         else
         {
+            LogDebug( ( "Successfully connected to broker: NetworkContext=%p", pNetworkContext->pContext ) );
             isSuccessful = true;
         }
 
