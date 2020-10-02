@@ -54,20 +54,6 @@
 /* WiFi configuration includes. */
 #include "aws_wifi_config.h"
 
-#include "logging_levels.h"
-
-/* Logging configuration for the Demo. */
-#ifndef LIBRARY_LOG_NAME
-    #define LIBRARY_LOG_NAME    "TEST"
-#endif
-
-#ifndef LIBRARY_LOG_LEVEL
-    #define LIBRARY_LOG_LEVEL    LOG_DEBUG
-#endif
-#include "logging_stack.h"
-
-/**************Default Configurations values***********************/
-
 #undef _SECURE_SOCKETS_WRAPPER_NOT_REDEFINE
 
 /**
@@ -511,8 +497,6 @@ int32_t SOCKETS_Send( Socket_t xSocket,
 
   if ((prvIsValidSocket(ulSocketNumber) == pdTRUE) && (pvBuffer != NULL))
   {
-    LogDebug(("SOCKETS_CONNECT: Socket is valid."));
-
 	SSocketContextPtr_t pxContext = &xSockets[ulSocketNumber];
 
 	if ((pxContext->ulFlags & securesocketsSOCKET_IS_CONNECTED) != 0UL)
@@ -522,8 +506,6 @@ int32_t SOCKETS_Send( Socket_t xSocket,
       {
         if ((pxContext->ulFlags & securesocketsSOCKET_SECURE_FLAG) != 0UL)
         {
-
-          LogDebug(("SOCKETS_CONNECT: About to send with TLS_Send."))
           /* Send through TLS pipe, if negotiated. */
           lSentBytes = TLS_Send(pxContext->pvTLSContext, pvBuffer, xDataLength);
 

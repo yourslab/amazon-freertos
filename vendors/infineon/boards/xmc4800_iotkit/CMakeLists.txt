@@ -238,12 +238,6 @@ target_sources(
     INTERFACE "${xmc4800_ports_dir}/secure_sockets/iot_secure_sockets.c"
 )
 
-target_sources(
-    AFR::secure_sockets::mcu_port
-    INTERFACE
-        AFR::common
-)
-
 # -------------------------------------------------------------------------------------------------
 # FreeRTOS demos and tests
 # -------------------------------------------------------------------------------------------------
