@@ -231,17 +231,12 @@ target_link_libraries(
         AFR::tls
         AFR::wifi
         AFR::pkcs11
+        AFR::common
 )
 
 target_sources(
     AFR::secure_sockets::mcu_port
     INTERFACE "${xmc4800_ports_dir}/secure_sockets/iot_secure_sockets.c"
-)
-
-target_sources(
-    AFR::secure_sockets::mcu_port
-    INTERFACE
-        AFR::common
 )
 
 # -------------------------------------------------------------------------------------------------
