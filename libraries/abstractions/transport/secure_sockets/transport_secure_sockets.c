@@ -408,7 +408,7 @@ static TransportSocketStatus_t establishConnect( NetworkContext_t * pNetworkCont
 
         if( secureSocketStatus != ( int32_t ) SOCKETS_ERROR_NONE )
         {
-            LogError( ( "Failed to establish new connection. secureSocketStatus=%d.", secureSocketStatus ) );
+            LogError( ( "Failed to establish new connection. secureSocketStatus=%d, ServerAddress=%s", secureSocketStatus, pServerInfo->pHostName ) );
             returnStatus = TRANSPORT_SOCKET_STATUS_CONNECT_FAILURE;
         }
     }
