@@ -363,25 +363,25 @@ int32_t SOCKETS_Connect( Socket_t xSocket,
 
   (void)xAddressLength;
 
-  LogDebug(("SOCKETS_Connect: Entered port implementation, pxAddress=%p", pxAddress));
+  LogDebug(("SOCKETS_Connect: Entered port implementation, pxAddress=%p ", pxAddress));
 
   if ((prvIsValidSocket( ulSocketNumber ) == pdTRUE) && (pxAddress != NULL) && (pxAddress->usPort != 0))
   {
     char host[20];
 	SSocketContextPtr_t pxContext = &xSockets[ulSocketNumber];
 
-      LogDebug(("SOCKETS_Connect: About to check if socket is not connected. Socket=%u", ulSocketNumber));
+      LogDebug(("SOCKETS_Connect: About to check if socket is not connected. Socket=%u ", ulSocketNumber));
     /* Check that the socket is not already connected. */
     if ((pxContext->ulFlags & securesocketsSOCKET_IS_CONNECTED ) == 0UL)
     {
       SOCKETS_inet_ntoa(pxAddress->ulAddress, host);
 
-      LogDebug(("SOCKETS_Connect: Converted host address to string. host=%s", host));
+      LogDebug(("SOCKETS_Connect: Converted host address to string. host=%s ", host));
 
       if (esp_sta_has_ip())
       {
     	espr_t conn_status = esp_netconn_connect((esp_netconn_p)(pxContext->xSocket), host, SOCKETS_ntohs(pxAddress->usPort));
-      LogDebug(("SOCKETS_Connect: Called esp_netconn_connect. conn_status=%d", conn_status));
+      LogDebug(("SOCKETS_Connect: Called esp_netconn_connect. conn_status=%d ", conn_status));
         if (conn_status == espOK)
         {
           pxContext->ulFlags |= securesocketsSOCKET_IS_CONNECTED;
