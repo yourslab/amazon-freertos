@@ -469,7 +469,7 @@ static void establishMqttSession( MQTTContext_t * pContext,
     transport.recv = SecureSocketsTransport_Recv;
 
     /* Fill the values for network buffer. */
-    networkBuffer.pBuffer = buffer;
+    networkBuffer.pBuffer = pvPortMalloc( NETWORK_BUFFER_SIZE );
     networkBuffer.size = NETWORK_BUFFER_SIZE;
 
     LogError( ( "The buffer is at %p\n", buffer ) );
