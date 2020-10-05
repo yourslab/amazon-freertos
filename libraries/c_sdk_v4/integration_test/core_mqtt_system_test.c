@@ -882,7 +882,7 @@ void testSetUp()
 void testTearDown()
 {
     /* Terminate MQTT connection. */
-    TEST_ASSERT_EQUAL( MQTTSuccess, MQTT_Disconnect( &context ) );
+    /*TEST_ASSERT_EQUAL( MQTTSuccess, MQTT_Disconnect( &context ) ); */
 
     /* Terminate TLS session and TCP connection. */
     ( void ) SecureSocketsTransport_Disconnect( &networkContext );
