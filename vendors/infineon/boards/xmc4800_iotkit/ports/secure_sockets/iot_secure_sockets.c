@@ -388,6 +388,7 @@ int32_t SOCKETS_Connect( Socket_t xSocket,
           lRetVal = SOCKETS_ERROR_NONE;
         }
       }
+      LogDebug(("SOCKETS_Connect: Return status after esp_netconn_connect. retStatus=%d ", lRetVal));
 
       /* Negotiate TLS if requested. */
       if ((lRetVal == SOCKETS_ERROR_NONE) && ((pxContext->ulFlags & securesocketsSOCKET_SECURE_FLAG) != 0))
