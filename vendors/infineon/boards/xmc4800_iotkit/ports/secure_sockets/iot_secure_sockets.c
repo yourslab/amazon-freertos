@@ -523,7 +523,7 @@ int32_t SOCKETS_Send( Socket_t xSocket,
         if ((pxContext->ulFlags & securesocketsSOCKET_SECURE_FLAG) != 0UL)
         {
 
-          LogDebug(("SOCKETS_CONNECT: About to send with TLS_Send."))
+          LogDebug(("SOCKETS_CONNECT: About to send with TLS_Send."));
           /* Send through TLS pipe, if negotiated. */
           lSentBytes = TLS_Send(pxContext->pvTLSContext, pvBuffer, xDataLength);
 
