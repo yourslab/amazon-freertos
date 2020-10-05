@@ -966,7 +966,7 @@ TEST_GROUP_RUNNER( coreMQTT_Integration )
  */
 void Subscribe_Publish_With_Qos_0()
 {
-    LogError( "wtf\n" );
+    LogError( ( "buffer is at: %p\n", buffer ) );
 }
 
 /* Include Subscribe_Publish_With_Qos_0 test case in both test groups to run it against AWS IoT
