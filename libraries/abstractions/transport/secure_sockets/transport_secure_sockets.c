@@ -427,6 +427,7 @@ static TransportSocketStatus_t establishConnect( NetworkContext_t * pNetworkCont
 
     if( returnStatus == TRANSPORT_SOCKET_STATUS_SUCCESS )
     {
+        LogError( ( "This is the tcpSocket: %p", tcpSocket ) );
         /* Set the socket in the network context. */
         pNetworkContext->pContext = tcpSocket;
     }
