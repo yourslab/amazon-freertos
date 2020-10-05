@@ -254,6 +254,9 @@ static uint16_t globalUnsubscribePacketIdentifier = 0U;
  */
 static uint16_t globalPublishPacketIdentifier = 0U;
 
+/* The network buffer must remain valid for the lifetime of the MQTT context. */
+static uint8_t buffer[ NETWORK_BUFFER_SIZE ];
+
 /**
  * @brief Represents the OpenSSL context used for TLS session with the broker
  * for tests.
@@ -459,9 +462,6 @@ static void establishMqttSession( MQTTContext_t * pContext,
 
     assert( pContext != NULL );
     assert( pNetworkContext != NULL );
-
-    /* The network buffer must remain valid for the lifetime of the MQTT context. */
-    static uint8_t buffer[ NETWORK_BUFFER_SIZE ];
 
     /* Setup the transport interface object for the library. */
     transport.pNetworkContext = pNetworkContext;
