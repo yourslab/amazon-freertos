@@ -472,6 +472,8 @@ static void establishMqttSession( MQTTContext_t * pContext,
     networkBuffer.pBuffer = buffer;
     networkBuffer.size = NETWORK_BUFFER_SIZE;
 
+    LogError( ( "The buffer is at %p\n", buffer ) );
+
     /* Clear the state of the MQTT context when creating a clean session. */
     if( createCleanSession == true )
     {
