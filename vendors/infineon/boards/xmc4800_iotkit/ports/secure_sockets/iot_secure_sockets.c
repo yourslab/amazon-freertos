@@ -54,6 +54,20 @@
 /* WiFi configuration includes. */
 #include "aws_wifi_config.h"
 
+#include "logging_levels.h"
+
+/* Logging configuration for the Demo. */
+#ifndef LIBRARY_LOG_NAME
+    #define LIBRARY_LOG_NAME    "TEST"
+#endif
+
+#ifndef LIBRARY_LOG_LEVEL
+    #define LIBRARY_LOG_LEVEL    LOG_DEBUG
+#endif
+#include "logging_stack.h"
+
+/**************Default Configurations values***********************/
+
 #undef _SECURE_SOCKETS_WRAPPER_NOT_REDEFINE
 
 /**
@@ -349,25 +363,32 @@ int32_t SOCKETS_Connect( Socket_t xSocket,
 
   (void)xAddressLength;
 
+  LogDebug(("SOCKETS_Connect: Entered port implementation, pxAddress=%p ", pxAddress));
+
   if ((prvIsValidSocket( ulSocketNumber ) == pdTRUE) && (pxAddress != NULL) && (pxAddress->usPort != 0))
   {
     char host[20];
 	SSocketContextPtr_t pxContext = &xSockets[ulSocketNumber];
 
+      LogDebug(("SOCKETS_Connect: About to check if socket is not connected. Socket=%u ", ulSocketNumber));
     /* Check that the socket is not already connected. */
     if ((pxContext->ulFlags & securesocketsSOCKET_IS_CONNECTED ) == 0UL)
     {
       SOCKETS_inet_ntoa(pxAddress->ulAddress, host);
 
+      LogDebug(("SOCKETS_Connect: Converted host address to string. host=%s ", host));
+
       if (esp_sta_has_ip())
       {
     	espr_t conn_status = esp_netconn_connect((esp_netconn_p)(pxContext->xSocket), host, SOCKETS_ntohs(pxAddress->usPort));
+      LogDebug(("SOCKETS_Connect: Called esp_netconn_connect. conn_status=%d ", conn_status));
         if (conn_status == espOK)
         {
           pxContext->ulFlags |= securesocketsSOCKET_IS_CONNECTED;
           lRetVal = SOCKETS_ERROR_NONE;
         }
       }
+      LogDebug(("SOCKETS_Connect: Return status after esp_netconn_connect. retStatus=%d ", lRetVal));
 
       /* Negotiate TLS if requested. */
       if ((lRetVal == SOCKETS_ERROR_NONE) && ((pxContext->ulFlags & securesocketsSOCKET_SECURE_FLAG) != 0))
@@ -495,8 +516,12 @@ int32_t SOCKETS_Send( Socket_t xSocket,
   /* Remove warning about unused parameters. */
   (void)ulFlags;
 
+  LogDebug(("SOCKETS_Send: Entered port implementation. pvBuffer=%p", pvBuffer ));
+
   if ((prvIsValidSocket(ulSocketNumber) == pdTRUE) && (pvBuffer != NULL))
   {
+    LogDebug(("SOCKETS_Send: Socket is valid."));
+
 	SSocketContextPtr_t pxContext = &xSockets[ulSocketNumber];
 
 	if ((pxContext->ulFlags & securesocketsSOCKET_IS_CONNECTED) != 0UL)
@@ -506,6 +531,8 @@ int32_t SOCKETS_Send( Socket_t xSocket,
       {
         if ((pxContext->ulFlags & securesocketsSOCKET_SECURE_FLAG) != 0UL)
         {
+
+          LogDebug(("SOCKETS_Send: About to send with TLS_Send."));
           /* Send through TLS pipe, if negotiated. */
           lSentBytes = TLS_Send(pxContext->pvTLSContext, pvBuffer, xDataLength);
 
