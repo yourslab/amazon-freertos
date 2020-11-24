@@ -152,6 +152,8 @@
 
 #include "iot_logging_setup.h"
 
+#define IOT_HTTPS_DISPATCH_USE_STATIC_MEMORY (1)
+
 /*
  * Provide default values for undefined memory allocation functions based on
  * the usage of dynamic memory allocation.
