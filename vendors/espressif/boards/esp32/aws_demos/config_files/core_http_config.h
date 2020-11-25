@@ -49,4 +49,6 @@
 
 /************ End of logging configuration ****************/
 
+#define IOT_HTTPS_DISPATCH_TASK_STACK_SIZE    ( configMINIMAL_STACK_SIZE * 4 )
+
 #endif /* ifndef CORE_HTTP_CONFIG_H_ */
