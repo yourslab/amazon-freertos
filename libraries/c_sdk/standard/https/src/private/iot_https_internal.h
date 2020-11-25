@@ -152,6 +152,8 @@
 
 #include "iot_logging_setup.h"
 
+#define IOT_HTTPS_DISPATCH_USE_STATIC_MEMORY    ( 1 )
+
 /*
  * Provide default values for undefined memory allocation functions based on
  * the usage of dynamic memory allocation.
@@ -194,7 +196,7 @@
     #define IOT_HTTPS_DISPATCH_QUEUE_SIZE           ( 4U ) /* The size of the queue containing requests ready to send to the server. */
 #endif
 #ifndef IOT_HTTPS_DISPATCH_TASK_COUNT
-    #define IOT_HTTPS_DISPATCH_TASK_COUNT           ( 2U ) /* The number of tasks that send requests from the queue. */
+    #define IOT_HTTPS_DISPATCH_TASK_COUNT           ( 1U ) /* The number of tasks that send requests from the queue. */
 #endif
 #ifndef IOT_HTTPS_DISPATCH_TASK_STACK_SIZE
     #define IOT_HTTPS_DISPATCH_TASK_STACK_SIZE      ( configMINIMAL_STACK_SIZE * 3 ) /* The stack size of each dispatch task. */
