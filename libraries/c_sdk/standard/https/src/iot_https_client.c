@@ -1937,7 +1937,6 @@ static IotHttpsReturnCode_t _sendHttpsHeadersAndBody( _httpsConnection_t * pHttp
     TransportInterface_t transportInterface;
     NetworkContext_t networkContext;
     uint32_t sendFlags = 0;
-    UBaseType_t uxHighWaterMark;
 
     coreHttpRequestHeaders.pBuffer = pHttpsRequest->pHeaders;
     coreHttpRequestHeaders.bufferLen = ( size_t ) ( pHttpsRequest->pHeadersEnd - pHttpsRequest->pHeaders );
@@ -1957,12 +1956,6 @@ static IotHttpsReturnCode_t _sendHttpsHeadersAndBody( _httpsConnection_t * pHttp
                                       NULL,
                                       sendFlags );
     status = _shimConvertStatus( coreHttpStatus );
-
-    uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
-    IotLogError( "Stack unused: %lu, total: %lu, used: %lu.\r\n",
-                 ( unsigned long ) uxHighWaterMark,
-                 ( unsigned long ) IOT_HTTPS_DISPATCH_TASK_STACK_SIZE,
-                 ( unsigned long ) IOT_HTTPS_DISPATCH_TASK_STACK_SIZE - ( unsigned long ) uxHighWaterMark );
 
     if( HTTPS_FAILED( status ) )
     {
@@ -1985,6 +1978,7 @@ static void _sendHttpsRequest( _httpsRequest_t * pHttpsRequest )
     IotHttpsReturnCode_t scheduleStatus = IOT_HTTPS_OK;
     IotLink_t * pQItem = NULL;
     _httpsRequest_t * pNextHttpsRequest = NULL;
+    UBaseType_t uxHighWaterMark;
 
     IotLogDebug( "Task with request ID: %p started.", pHttpsRequest );
 
@@ -2165,6 +2159,12 @@ static void _sendHttpsRequest( _httpsRequest_t * pHttpsRequest )
     /* Now that the current request is finished, we dequeue the current request from the queue. */
     IotDeQueue_DequeueHead( &( pHttpsConnection->reqQ ) );
     IotMutex_Unlock( &( pHttpsConnection->connectionMutex ) );
+
+    uxHighWaterMark = uxTaskGetStackHighWaterMark( NULL );
+    IotLogError( "Stack unused: %lu, total: %lu, used: %lu.\r\n",
+                 ( unsigned long ) uxHighWaterMark,
+                 ( unsigned long ) IOT_HTTPS_DISPATCH_TASK_STACK_SIZE,
+                 ( unsigned long ) IOT_HTTPS_DISPATCH_TASK_STACK_SIZE - ( unsigned long ) uxHighWaterMark );
 
     /* This routine returns a void so there is no HTTPS_FUNCTION_CLEANUP_END();. */
 }
